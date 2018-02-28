@@ -263,7 +263,7 @@ function iswup(time,duration,f_1,f_2)
 end
 
 
-function sweep(duration,f_1,f_2,samplerate,silence_duration)
+function sweep(duration,silence_duration,f_1,f_2,samplerate)
 	#duration in seconds
 	sequence=linspace(0,duration,samplerate*duration)
 	sweep=swup.(sequence,duration,f_1,f_2)
