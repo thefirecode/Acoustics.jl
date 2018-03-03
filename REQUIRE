@@ -1,6 +1,4 @@
 julia 0.6
-MP3
-LibSndFile
 Distributions
 DSP
 WAV
