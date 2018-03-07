@@ -231,6 +231,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 	l=length(source)
 
+
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
@@ -254,7 +255,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		max=sum(abs2.(x))
 		target=max*(10^(-decay/(20.0)))
 		total=max
-
+		l_log=round(logspace(0,log(10,l)))
 		i=1
 
 
