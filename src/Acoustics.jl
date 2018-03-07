@@ -3,7 +3,7 @@
 module Acoustics
 using DSP,Distributions,WAV
 
-export general,c,l,RT,RT_multi_,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
+export general,c,c_parallel,l,RT,RT_multi_,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
 
 function general(source,weighting="z",band="b" ;s=1)
 
@@ -65,6 +65,8 @@ function general(source,weighting="z",band="b" ;s=1)
 
 end
 
+
+
 function c(source,time,weighting="z",bands="b" ;s=1)
 
 	samplerate=1.0*Int(source.samplerate)
@@ -91,7 +93,7 @@ function c(source,time,weighting="z",bands="b" ;s=1)
 
 
 #f(x) is the defined function
-	f(x) =10*log(10,sum(x[1:time])/sum(x[time:l]))
+f(x)=10*log(10,sum(x[1:time])/sum(x[time:l]))
 
 	if (bands=="b")||(bands=="B")
 
@@ -131,6 +133,71 @@ function c(source,time,weighting="z",bands="b" ;s=1)
 
 end
 
+function c_parallel(source,time,weighting="z",bands="b" ;s=1)
+
+	samplerate=1.0*Int(source.samplerate)
+	l=length(source)
+	time=Int((time/1000.0)*Int(source.samplerate))
+
+
+	if (weighting=="z")||(weighting=="Z")
+
+	elseif (weighting=="a")||(weighting=="A")
+
+	elseif (weighting=="a")||(weighting=="A")
+
+	elseif (weighting=="b")||(weighting=="B")
+
+	elseif (weighting=="c")||(weighting=="C")
+
+	elseif (weighting=="d")||(weighting=="D")
+
+	else
+		return print("Weighting undefined")
+
+	end
+
+
+#f(x) is the defined function
+f(x)=10*log(10,sum(x[1:time])/sum(x[time:l]))
+
+	if (bands=="b")||(bands=="B")
+
+		source=abs2.(source)
+
+		return f(source)
+
+
+	elseif (bands=="1/3")||(bands=="1/3")
+
+	bands=[Bandpass(11.2/Int(samplerate),14.1/Int(samplerate)),Bandpass(14.1/Int(samplerate),17.8/	Int(samplerate)),Bandpass(17.8/Int(samplerate),22.4/Int(samplerate)),Bandpass(22.4/Int(samplerate),28.2/Int(samplerate)),Bandpass(28.2/Int(samplerate),35.5/Int(samplerate)),Bandpass(35.5/Int(samplerate),44.7/Int(samplerate)),Bandpass(44.7/Int(samplerate),56.2/Int(samplerate)),Bandpass(56.2/Int(samplerate),70.8/Int(samplerate)),Bandpass(70.8/Int(samplerate),89.1/Int(samplerate)),Bandpass(89.1/Int(samplerate),112/Int(samplerate)),Bandpass(112/Int(samplerate),141/Int(samplerate)),Bandpass(141/Int(samplerate),178/Int(samplerate)),Bandpass(178/Int(samplerate),224/Int(samplerate)),Bandpass(224/Int(samplerate),282/Int(samplerate)),Bandpass(282/Int(samplerate),355/Int(samplerate)),Bandpass(355/Int(samplerate),447/Int(samplerate)),Bandpass(447/Int(samplerate),562/Int(samplerate)),Bandpass(562/Int(samplerate),708/Int(samplerate)),Bandpass(708/Int(samplerate),891/Int(samplerate)),Bandpass(891/Int(samplerate),1122/Int(samplerate)),Bandpass(1122/Int(samplerate),1413/Int(samplerate)),Bandpass(1413/Int(samplerate),1778/Int(samplerate)),Bandpass(1778/Int(samplerate),2239/Int(samplerate)),Bandpass(2239/Int(samplerate),2818/Int(samplerate)),Bandpass(2818/Int(samplerate),3548/Int(samplerate)),Bandpass(3548/Int(samplerate),4467/Int(samplerate)),Bandpass(4467/Int(samplerate),5623/Int(samplerate)),Bandpass(5623/Int(samplerate),7079/Int(samplerate)),Bandpass(7079/Int(samplerate),8913/Int(samplerate)),Bandpass(8913/Int(samplerate),11220/Int(samplerate)),Bandpass(11220/Int(samplerate),14130/Int(samplerate)),Bandpass(14130/Int(samplerate),17780/Int(samplerate)),Bandpass(17780/Int(samplerate),0.5)]
+
+	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
+
+
+		results=[abs2.(filt(digitalfilter(bands[1],Butterworth(2)),source))]
+
+
+	i=2
+
+	while length(bands)>=i
+
+
+		results=vcat(results,[abs2.(filt(digitalfilter(bands[1],Butterworth(2)),source))])
+
+		i+=1
+
+	end
+
+
+
+	return hcat(center,f.(results))
+
+	else
+
+	end
+
+end
 
 function d(source,time,weighting="z",bands="b" ;s=1)
 
