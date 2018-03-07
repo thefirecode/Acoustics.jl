@@ -106,11 +106,11 @@ f(x)=10*log(10,sum(x[1:time])/sum(x[time:l]))
 
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
-		
+
 
 
 	results=pmap(x->f(abs2.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
-	
+
 	return hcat(center,results)
 
 
@@ -164,23 +164,11 @@ function d(source,time,weighting="z",bands="b" ;s=1)
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
 
-		results=[abs2.(filt(digitalfilter(bands[1],Butterworth(2)),source))]
-
-
-	i=2
-
-	while length(bands)>=i
-
-
-		results=vcat(results,[abs2.(filt(digitalfilter(bands[i],Butterworth(2)),source))])
-
-		i+=1
-
-	end
+	results=pmap(x->f(abs2.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
 
 
 
-	return hcat(center,f.(results))
+	return hcat(center,results)
 
 	else
 
@@ -227,25 +215,9 @@ function l(source,percent,weighting="z",band="b" ;s=1)
 
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
+	results=pmap(x->f(abs.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
 
-
-	results=[abs.(filt(digitalfilter(bands[1],Butterworth(2)),source))]
-
-
-	i=2
-
-	while length(bands)>=i
-
-
-		results=vcat(results,[filt(digitalfilter(bands[i],Butterworth(2)),source)])
-
-		i+=1
-
-	end
-
-
-
-	return hcat(center,f.(results))
+	return hcat(center,results)
 
 	else
 
