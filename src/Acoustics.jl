@@ -109,8 +109,8 @@ f(x)=10*log(10,sum(x[1:time])/sum(x[time:l]))
 		results=[]
 
 
-	@sync @parallel vcat(results) for i=1:length(bands)
-		[f(abs2.(filt(digitalfilter(bands[i],Butterworth(2)),source)))]
+	@sync @parallel (+) for i=1:length(bands)
+		f(abs2.(filt(digitalfilter(bands[i],Butterworth(2)),source)))
 	end
 
 
