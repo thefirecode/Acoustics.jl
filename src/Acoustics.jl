@@ -230,7 +230,6 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 	samplerate=1.0*Int(source.samplerate)
 
 	l=length(source)
-	l_lg=logspace(0,log(10,l),32)
 
 
 	if (weighting=="z")||(weighting=="Z")
@@ -254,7 +253,7 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 	function f(x)
 		max=sum(x)
 		target=[max*10^(-5/20),max*10^(-decay/20)]
-		search=round.(logspace(0,log(10,l),100))
+		search=Int(round.(logspace(0,log(10,l),100)))
 		i=1
 
 		while sum(abs2(x[1:search[i]]))>=target[1]
