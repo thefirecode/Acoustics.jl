@@ -284,9 +284,6 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 	end
 
 
-		return i/samplerate
-	end
-
 	if (band=="b")||(band=="B")
 
 		return f(source)
