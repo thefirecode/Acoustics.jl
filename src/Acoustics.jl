@@ -250,11 +250,37 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 	end
 
-	function f(x)
-		m=
-		b=
 
-		return
+	function f(x)
+		max=sum(x)
+		target=[max*10^(-5/20),max*10^(-decay/20)]
+		search=round.(logspace(0,log(10,l),100))
+		i=1
+
+		while sum(abs2(x[1:search[i]]))>=target[1]
+			i_5=search[i]
+			i+=1
+		end
+
+		while sum(abs2(x[1:i_5]))>=target[1]
+				i_5+=1
+		end
+
+			i=1
+		while sum(abs2(x[1:search[i]]))>=target[2]
+			i_target=search[i]
+			i+=1
+		end
+
+		while sum(abs2(x[1:i_target]))>=target[2]
+			i_target+=1
+		end
+		a=20*log(10,sum(abs2(x[1:i_5])))
+		b=20*log(10,sum(abs2(x[1:i_target])))
+		m=(a-b)/(i_target-i_5)
+		b=a-(m*i_5)
+
+		return (decay-b)/m
 	end
 
 
@@ -273,23 +299,11 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 
 
-	results=[filt(digitalfilter(bands[1],Butterworth(2)),source)]
-
-
-	i=2
-
-	while length(bands)>=i
-
-
-		results=vcat(results,[filt(digitalfilter(bands[i],Butterworth(2)),source)])
-
-		i+=1
-
-	end
+	results=pmap(x->f(abs2.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
 
 
 
-	return hcat(center,f.(results))
+	return hcat(center,results)
 
 	else
 
