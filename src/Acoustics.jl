@@ -3,7 +3,7 @@
 module Acoustics
 using DSP,Distributions,WAV
 
-export general,c,l,RT,RT_parallel,RT_multi_,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
+export general,c,l,RT,RT_parallel,RT_parallel_fft,RT_multi_,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,sinc
 
 function general(source,weighting="z",band="b" ;s=1)
 
@@ -251,37 +251,115 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 
 	function f(x)
-		max=sum(x)
-		target=[max*10^(-5/20),max*10^(-decay/20)]
-		search=Int(round.(logspace(0,log(10,l),100)))
-		i=1
+		x=abs2.(x)
+		target=(10^(-decay/20))*sum(x[:,1])
+	
 
-		while sum(abs2(x[1:search[i]]))>=target[1]
-			i_5=search[i]
-			i+=1
+	if x[1]>target
+	
+		return Inf
+
+	else
+
+		if (l>150000)&&(l*0.1<150000)
+
+			length=150000
+		
+		elseif  (l>150000)
+
+			length=Int(round(l*0.1))
+
+		else
+			length=l
 		end
 
-		while sum(abs2(x[1:i_5]))>=target[1]
-				i_5+=1
-		end
+			print(" \n")
+			print(length)
+			print(" \n")
 
-			i=1
-		while sum(abs2(x[1:search[i]]))>=target[2]
-			i_target=search[i]
-			i+=1
-		end
+			decayplot=[]
+			time=linspace(0,length/samplerate,length)
+				for i = 1:length
+						
+					decayplot=vcat(decayplot,sum(x[1:i]))
+				
+				end
+			
+				decayplot=reverse(decayplot)			
+				(c,m)=linreg(decayplot,time)
+			
+				print(" m \n")
+				print(" \n")
+				print(m)
+				print(" \n")
 
-		while sum(abs2(x[1:i_target]))>=target[2]
-			i_target+=1
-		end
-		a=20*log(10,sum(abs2(x[1:i_5])))
-		b=20*log(10,sum(abs2(x[1:i_target])))
-		m=(a-b)/(i_target-i_5)
-		b=a-(m*i_5)
+			
+				print(" c \n")
+				print(" \n")
+				print(c)
+				print(" \n")
 
-		return (decay-b)/m
+				return ((target-c)/m)
+
+		end
 	end
 
+	if (band=="b")||(band=="B")
+
+		return f(abs2.(source))
+
+	elseif (band=="1/3")||(band=="1/3")
+
+	bands=[Bandpass(11.2/Int(samplerate),14.1/Int(samplerate)),Bandpass(14.1/Int(samplerate),17.8/	Int(samplerate)),Bandpass(17.8/Int(samplerate),22.4/Int(samplerate)),Bandpass(22.4/Int(samplerate),28.2/Int(samplerate)),Bandpass(28.2/Int(samplerate),35.5/Int(samplerate)),Bandpass(35.5/Int(samplerate),44.7/Int(samplerate)),Bandpass(44.7/Int(samplerate),56.2/Int(samplerate)),Bandpass(56.2/Int(samplerate),70.8/Int(samplerate)),Bandpass(70.8/Int(samplerate),89.1/Int(samplerate)),Bandpass(89.1/Int(samplerate),112/Int(samplerate)),Bandpass(112/Int(samplerate),141/Int(samplerate)),Bandpass(141/Int(samplerate),178/Int(samplerate)),Bandpass(178/Int(samplerate),224/Int(samplerate)),Bandpass(224/Int(samplerate),282/Int(samplerate)),Bandpass(282/Int(samplerate),355/Int(samplerate)),Bandpass(355/Int(samplerate),447/Int(samplerate)),Bandpass(447/Int(samplerate),562/Int(samplerate)),Bandpass(562/Int(samplerate),708/Int(samplerate)),Bandpass(708/Int(samplerate),891/Int(samplerate)),Bandpass(891/Int(samplerate),1122/Int(samplerate)),Bandpass(1122/Int(samplerate),1413/Int(samplerate)),Bandpass(1413/Int(samplerate),1778/Int(samplerate)),Bandpass(1778/Int(samplerate),2239/Int(samplerate)),Bandpass(2239/Int(samplerate),2818/Int(samplerate)),Bandpass(2818/Int(samplerate),3548/Int(samplerate)),Bandpass(3548/Int(samplerate),4467/Int(samplerate)),Bandpass(4467/Int(samplerate),5623/Int(samplerate)),Bandpass(5623/Int(samplerate),7079/Int(samplerate)),Bandpass(7079/Int(samplerate),8913/Int(samplerate)),Bandpass(8913/Int(samplerate),11220/Int(samplerate)),Bandpass(11220/Int(samplerate),14130/Int(samplerate)),Bandpass(14130/Int(samplerate),17780/Int(samplerate)),Bandpass(17780/Int(samplerate),0.5)]
+
+	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
+
+
+
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
+
+
+
+	return hcat(center,results)
+
+	else
+
+	end
+
+end
+
+function RT_parallel_fft(source,decay,weighting="z",band="b" ;s=1)
+
+	samplerate=1.0*Int(source.samplerate)
+
+	l=length(source)
+
+
+	if (weighting=="z")||(weighting=="Z")
+
+	elseif (weighting=="a")||(weighting=="A")
+
+	elseif (weighting=="a")||(weighting=="A")
+
+	elseif (weighting=="b")||(weighting=="B")
+
+	elseif (weighting=="c")||(weighting=="C")
+
+	elseif (weighting=="d")||(weighting=="D")
+
+	else
+		return print("Weighting undefined")
+
+	end
+
+
+	function f(x)
+
+		
+
+		#linreg(,)	
+
+	end
 
 	if (band=="b")||(band=="B")
 
@@ -295,7 +373,7 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 
 
-	results=pmap(x->f(abs2.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
 
 
 
@@ -306,6 +384,7 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 	end
 
 end
+
 
 function RT(source,decay,weighting="z",band="b" ;s=1)
 
@@ -576,23 +655,11 @@ function Ts(source,weighting="z",band="b" ;s=1)
 
 
 
-	results=[filt(digitalfilter(bands[1],Butterworth(2)),source)]
+center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
 
-	i=2
-
-	while length(bands)>=i
-
-
-		results=vcat(results,[filt(digitalfilter(bands[i],Butterworth(2)),source)])
-
-		i+=1
-
-	end
-
-
-
-	return hcat(center,f.(results))
+	return hcat(center,results)
 
 	else
 
@@ -682,7 +749,5 @@ function deconvolve(sweep,measured)
 
 	return save("impulse.wav",rimp[:,1])
 end
-
-
 
 end
