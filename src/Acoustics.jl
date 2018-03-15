@@ -249,59 +249,37 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 	end
 
-
+#numerical derivative method taken from "Numerical Evaluation of Derivatives of Functions"(2014) by S. B. Sahoo, M. Acharya and B. P. Acharya
 	function f(x)
 		x=abs2.(x)
-		target=(10^(-decay/20))*sum(x[:,1])
-	
+		max=sum(x)
+		x=reverse((/).(x,max))
+		target=[(10^(-5/20)),(10^(-((decay+5)/20))]
+		z=[complex(0,-1),1,complex(0,1),-1]
+		h=[1,complex(0,1),-1,complex(0,-1)]
+		taylor=[1,x[1]]
+		derivative=2
 
-	if x[1]>target
-	
+		#20-point coefficient from DLMF nist
+		nodes=[0.076526521133497333755,0.227785851141645078080,0.373706088715419560673,0.510867001950827098004,0.636053680726515025453,0.746331906460150792614,0.839116971822218823395,0.912234428251325905868,0.963971927277913791268,0.993128599185094924786]
+		weights=[0.152753387130725850698,0.149172986472603746788,0.142096109318382051329,0.131688638449176626898,0.118194531961518417312,0.101930119817240435037,0.083276741576704748725,0.062672048334109063570,0.040601429800386941331,0.017614007139152118312]
+
+		sequence=linspace(0,l/samplerate,l)
+
+	if x[1]>target[2]
+
 		return Inf
 
 	else
 
-		if (l>150000)&&(l*0.1<150000)
 
-			length=150000
-		
-		elseif  (l>150000)
 
-			length=Int(round(l*0.1))
+	for i=i:length(nodes)
+		sinc.((*).((-).(nodes[i],sequence),samplerate))
 
-		else
-			length=l
-		end
+		intermediate
+	end
 
-			print(" \n")
-			print(length)
-			print(" \n")
-
-			decayplot=[]
-			time=linspace(0,length/samplerate,length)
-				for i = 1:length
-						
-					decayplot=vcat(decayplot,sum(x[1:i]))
-				
-				end
-			
-				decayplot=reverse(decayplot)			
-				(c,m)=linreg(decayplot,time)
-			
-				print(" m \n")
-				print(" \n")
-				print(m)
-				print(" \n")
-
-			
-				print(" c \n")
-				print(" \n")
-				print(c)
-				print(" \n")
-
-				return ((target-c)/m)
-
-		end
 	end
 
 	if (band=="b")||(band=="B")
@@ -327,64 +305,6 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 	end
 
 end
-
-function RT_parallel_fft(source,decay,weighting="z",band="b" ;s=1)
-
-	samplerate=1.0*Int(source.samplerate)
-
-	l=length(source)
-
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-
-	elseif (weighting=="a")||(weighting=="A")
-
-	elseif (weighting=="b")||(weighting=="B")
-
-	elseif (weighting=="c")||(weighting=="C")
-
-	elseif (weighting=="d")||(weighting=="D")
-
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-	function f(x)
-
-		
-
-		#linreg(,)	
-
-	end
-
-	if (band=="b")||(band=="B")
-
-		return f(source)
-
-	elseif (band=="1/3")||(band=="1/3")
-
-	bands=[Bandpass(11.2/Int(samplerate),14.1/Int(samplerate)),Bandpass(14.1/Int(samplerate),17.8/	Int(samplerate)),Bandpass(17.8/Int(samplerate),22.4/Int(samplerate)),Bandpass(22.4/Int(samplerate),28.2/Int(samplerate)),Bandpass(28.2/Int(samplerate),35.5/Int(samplerate)),Bandpass(35.5/Int(samplerate),44.7/Int(samplerate)),Bandpass(44.7/Int(samplerate),56.2/Int(samplerate)),Bandpass(56.2/Int(samplerate),70.8/Int(samplerate)),Bandpass(70.8/Int(samplerate),89.1/Int(samplerate)),Bandpass(89.1/Int(samplerate),112/Int(samplerate)),Bandpass(112/Int(samplerate),141/Int(samplerate)),Bandpass(141/Int(samplerate),178/Int(samplerate)),Bandpass(178/Int(samplerate),224/Int(samplerate)),Bandpass(224/Int(samplerate),282/Int(samplerate)),Bandpass(282/Int(samplerate),355/Int(samplerate)),Bandpass(355/Int(samplerate),447/Int(samplerate)),Bandpass(447/Int(samplerate),562/Int(samplerate)),Bandpass(562/Int(samplerate),708/Int(samplerate)),Bandpass(708/Int(samplerate),891/Int(samplerate)),Bandpass(891/Int(samplerate),1122/Int(samplerate)),Bandpass(1122/Int(samplerate),1413/Int(samplerate)),Bandpass(1413/Int(samplerate),1778/Int(samplerate)),Bandpass(1778/Int(samplerate),2239/Int(samplerate)),Bandpass(2239/Int(samplerate),2818/Int(samplerate)),Bandpass(2818/Int(samplerate),3548/Int(samplerate)),Bandpass(3548/Int(samplerate),4467/Int(samplerate)),Bandpass(4467/Int(samplerate),5623/Int(samplerate)),Bandpass(5623/Int(samplerate),7079/Int(samplerate)),Bandpass(7079/Int(samplerate),8913/Int(samplerate)),Bandpass(8913/Int(samplerate),11220/Int(samplerate)),Bandpass(11220/Int(samplerate),14130/Int(samplerate)),Bandpass(14130/Int(samplerate),17780/Int(samplerate)),Bandpass(17780/Int(samplerate),0.5)]
-
-	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
-
-
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
-
-
-
-	return hcat(center,results)
-
-	else
-
-	end
-
-end
-
 
 function RT(source,decay,weighting="z",band="b" ;s=1)
 
