@@ -258,7 +258,6 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 		z=[complex(0,-1),1,complex(0,1),-1]
 		h=[1,complex(0,1),-1,complex(0,-1)]
 		taylor=[1,x[1]]
-		derivative=2
 
 		#20-point coefficient from DLMF nist
 		nodes=[0.076526521133497333755,0.227785851141645078080,0.373706088715419560673,0.510867001950827098004,0.636053680726515025453,0.746331906460150792614,0.839116971822218823395,0.912234428251325905868,0.963971927277913791268,0.993128599185094924786]
@@ -272,19 +271,31 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 	else
 
+	for m=3:12 #this selects the derivative
+			for j=1:4 #this selects the range
 
+				for i=i:length(nodes) #this evaluates the function on one of the ranges
 
-	for i=i:length(nodes)
-		sinc.((*).((-).(nodes[i],sequence),samplerate))
+					intermediate+=h[j]*sum((*).(weights[i],(*).(sinc.((*).((-).(z[j]+h[j]*nodes[i],sequence),samplerate)),(/).(1,(^).((-).(z[j]+h[j]*nodes[i],sequence),m+1)))))
+					intermediate+=h[j]*sum((*).(weights[i],(*).(sinc.((*).((-).(z[j]+h[j]*(-nodes[i]),sequence),samplerate)),(/).(1,(^).((-).(z[j]+h[j]*(-nodes[i]),sequence),m+1)))))
 
-		intermediate
+				end
+
+			end
+			taylor=vcat(taylor,intermediate)
 	end
+
+
+		schroeder=(x->taylor[1]+taylor[2]*x+(taylor[3]/2)*x^2+(taylor[4]/6)*x^3+(taylor[5]/24)*x^4+(taylor[6]/120)*x^5+(taylor[7]/720)*x^6+(taylor[8]/5040)*x^7+(taylor[9]/362880)*x^8+(taylor[10]/362880)*x^9+(taylor[11]/3628800)*x^10+(taylor[12]/39916800)*x^11+(taylor[13]/479001600)*x^12).(sequence))
+		c,m=linreg( ,sequence)
+
+		return (10^(-decay/20)-c)/m
 
 	end
 
 	if (band=="b")||(band=="B")
 
-		return f(abs2.(source))
+		return f(source)
 
 	elseif (band=="1/3")||(band=="1/3")
 
