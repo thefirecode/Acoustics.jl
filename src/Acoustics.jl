@@ -3,7 +3,7 @@
 module Acoustics
 using DSP,Distributions,WAV
 
-export general,c,l,RT,RT_parallel,RT_parallel_fft,RT_multi_,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,sinc
+export general,c,l,RT,RT_parallel,RT_multi_,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,sinc
 
 function general(source,weighting="z",band="b" ;s=1)
 
@@ -70,6 +70,7 @@ function c(source,time,weighting="z",bands="b" ;s=1)
 	samplerate=1.0*Int(source.samplerate)
 	l=length(source)
 	time=Int((time/1000.0)*Int(source.samplerate))
+	source=abs2.(source)
 
 
 	if (weighting=="z")||(weighting=="Z")
@@ -91,11 +92,10 @@ function c(source,time,weighting="z",bands="b" ;s=1)
 
 
 #f(x) is the defined function
-f(x)=10*log(10,sum(x[1:time])/sum(x[time:l]))
+f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:l])))
 
 	if (bands=="b")||(bands=="B")
 
-		source=abs2.(source)
 
 		return f(source)
 
@@ -109,7 +109,7 @@ f(x)=10*log(10,sum(x[1:time])/sum(x[time:l]))
 
 
 
-	results=pmap(x->f(abs2.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
 
 	return hcat(center,results)
 
@@ -148,11 +148,9 @@ function d(source,time,weighting="z",bands="b" ;s=1)
 
 
 #f(x) is the defined function
-	f(x) =sum(x[1:time])/sum(x[time:l])
+	f(x) =sum(abs2.(x[1:time]))/sum(abs2.(x[time:l]))
 
 	if (bands=="b")||(bands=="B")
-
-		source=abs2.(source)
 
 		return f(source)
 
@@ -164,7 +162,7 @@ function d(source,time,weighting="z",bands="b" ;s=1)
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
 
-	results=pmap(x->f(abs2.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
 
 
 
@@ -215,7 +213,7 @@ function l(source,percent,weighting="z",band="b" ;s=1)
 
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
-	results=pmap(x->f(abs.(filt(digitalfilter(x,Butterworth(2)),source))),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
 
 	return hcat(center,results)
 
@@ -251,13 +249,26 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 #numerical derivative method taken from "Numerical Evaluation of Derivatives of Functions"(2014) by S. B. Sahoo, M. Acharya and B. P. Acharya
 	function f(x)
+		samplerate=1.0*Int(x.samplerate)
 		x=abs2.(x)
 		max=sum(x)
 		x=reverse((/).(x,max))
-		target=[(10^(-5/20)),(10^(-((decay+5)/20))]
+		target=[(10^(-5/20)),(10^(-((decay+5)/20)))]
 		z=[complex(0,-1),1,complex(0,1),-1]
 		h=[1,complex(0,1),-1,complex(0,-1)]
+
 		taylor=[1,x[1]]
+#hi and low refer to level
+		hi_range=1
+		lo_range=1
+		numerator=0
+		top_real=0.0
+		top_imag=0.0
+		denominator=0
+		final=0
+		intermediate=0
+		total=20
+		s=0.0000000000002
 
 		#20-point coefficient from DLMF nist
 		nodes=[0.076526521133497333755,0.227785851141645078080,0.373706088715419560673,0.510867001950827098004,0.636053680726515025453,0.746331906460150792614,0.839116971822218823395,0.912234428251325905868,0.963971927277913791268,0.993128599185094924786]
@@ -271,23 +282,154 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 
 	else
 
-	for m=3:12 #this selects the derivative
-			for j=1:4 #this selects the range
+			for m=2:12 #this selects the derivative
+				for j=1:4 #this selects the range
 
-				for i=i:length(nodes) #this evaluates the function on one of the ranges
+					for i=1:length(nodes) #this evaluates the function on one of the ranges
 
-					intermediate+=h[j]*sum((*).(weights[i],(*).(sinc.((*).((-).(z[j]+h[j]*nodes[i],sequence),samplerate)),(/).(1,(^).((-).(z[j]+h[j]*nodes[i],sequence),m+1)))))
-					intermediate+=h[j]*sum((*).(weights[i],(*).(sinc.((*).((-).(z[j]+h[j]*(-nodes[i]),sequence),samplerate)),(/).(1,(^).((-).(z[j]+h[j]*(-nodes[i]),sequence),m+1)))))
+						#intermediate+=h[j]*sum((*).(weights[i],(*).(sinc.((*).((-).(z[j]+h[j]*nodes[i],sequence),samplerate)),(/).(1,(^).((-).(z[j]+h[j]*nodes[i],sequence),m+1)))))
+						#intermediate+=h[j]*sum((*).(weights[i],(*).(sinc.((*).((-).(z[j]+h[j]*(-nodes[i]),sequence),samplerate)),(/).(1,(^).((-).(z[j]+h[j]*(-nodes[i]),sequence),m+1)))))
+						numerator=(*).((-).(z[j]+s*h[j]*nodes[i],sequence),samplerate)
+						top_real=real.(numerator)%(2*pi)
+						top_imag=complex(0,imag.(numerator)%(2*pi))
+						numerator=((real,imaginary)->sin(real)*cos(imaginary)+cos(real)*sin(imaginary)).(top_real,top_imag)
+
+
+						print("Numerator Positive:")
+						print("\n")
+						print(sum(numerator))
+						print("\n")
+
+						denominator=(^).((-).(z[j]+s*h[j]*nodes[i],sequence),m+2)
+						denominator=(/).(1,denominator)
+						intermediate=(*).(numerator,denominator)
+						intermediate=(*).(weights[i],intermediate)
+						intermediate=sum(intermediate)
+						final+=h[j]*intermediate
+
+						#negative nodes
+						numerator=(*).((-).(z[j]-s*h[j]*nodes[i],sequence),samplerate)
+						top_real=real.(numerator)%(2*pi)
+						top_imag=complex(0,imag.(numerator)%(2*pi))
+						numerator=((real,imaginary)->sin(real)*cos(imaginary)+cos(real)*sin(imaginary)).(top_real,top_imag)
+
+
+
+
+
+						denominator=(^).((-).(z[j]-s*h[j]*nodes[i],sequence),m+2)
+						denominator=(/).(1,denominator)
+
+						intermediate=(*).(numerator,denominator)
+						intermediate=(*).(weights[i],intermediate)
+						intermediate=sum(intermediate)
+						final+=h[j]*intermediate
+
+					end
 
 				end
+				final=imag((factorial(m)/complex(0,2*pi))*final)
+				taylor=vcat(taylor,final)
 
+				final=0
 			end
-			taylor=vcat(taylor,intermediate)
-	end
+		end
+		#print(taylor)
+		#print("\n")
+
+		schroeder=(x->taylor[1]+taylor[2]*x+(taylor[3]/2)*x^2+(taylor[4]/6)*x^3+(taylor[5]/24)*x^4+(taylor[6]/120)*x^5+(taylor[7]/720)*x^6+(taylor[8]/5040)*x^7+(taylor[9]/362880)*x^8+(taylor[10]/362880)*x^9+(taylor[11]/3628800)*x^10+(taylor[12]/39916800)*x^11+(taylor[13]/479001600)*x^12).(sequence)
 
 
-		schroeder=(x->taylor[1]+taylor[2]*x+(taylor[3]/2)*x^2+(taylor[4]/6)*x^3+(taylor[5]/24)*x^4+(taylor[6]/120)*x^5+(taylor[7]/720)*x^6+(taylor[8]/5040)*x^7+(taylor[9]/362880)*x^8+(taylor[10]/362880)*x^9+(taylor[11]/3628800)*x^10+(taylor[12]/39916800)*x^11+(taylor[13]/479001600)*x^12).(sequence))
-		c,m=linreg( ,sequence)
+#the -5dB decay point
+		if 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-5.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-4.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-3.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-2.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-1.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-0.5))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-0.4))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-0.3))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-0.2))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-0.1))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.05))*l))]>target[1]
+			hi_range=Int(ceil((1-10^(-0.05))*l))
+
+		else
+			hi_range=1
+		end
+
+
+		while total>=target[1]
+			total=schroeder[hi_range]
+			hi_range+=1
+		end
+
+
+		#decay level
+		if schroeder[Int(ceil((1-10^(-0.05))*l))]>target[2]
+					lo_range=Int(ceil((1-10^(-0.05))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-0.1))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-0.2))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-0.3))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-0.4))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-0.5))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-1.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-2.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-3.0))*l))
+
+		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-4.0))*l))
+
+		elseif 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[2]
+			lo_range=Int(ceil((1-10^(-5.0))*l))
+
+		else
+			lo_range=1
+		end
+
+
+		while total>=target[2]
+			total=schroeder[lo_range]
+			lo_range+=1
+		end
+
+		c,m=linreg(schroeder[hi_range:lo_range],sequence[hi_range:lo_range])
 
 		return (10^(-decay/20)-c)/m
 
@@ -495,7 +637,6 @@ function RTR_(decay,source,rate)
 		i=1
 
 	end
-	deconvolve
 
 	while total>=target
 
@@ -531,10 +672,8 @@ function RT_multi_(decay,source)
 	end
 
 
-	results=hcat(center,results)
 
-
-	return results
+	return hcat(center,results)
 
 
 end
