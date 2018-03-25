@@ -320,7 +320,7 @@ function RT_parallel(source,decay,weighting="z",band="b" ;s=1)
 						denominator=(^).((-).(z[j]-s*h[j]*nodes[i],sequence),m+2)
 						denominator=(/).(1,denominator)
 
-						intermediate=(*).(numerator,denominator)
+						intermediate=(*).(numerator,denominator,x)
 						intermediate=(*).(weights[i],intermediate)
 						intermediate=sum(intermediate)
 						final+=h[j]*intermediate
