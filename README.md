@@ -7,11 +7,10 @@
 [![codecov.io](http://codecov.io/github/thefirecode/Acoustics.jl/coverage.svg?branch=master)](http://codecov.io/github/thefirecode/Acoustics.jl?branch=master)
 #Acoustics.jl
 
-Acoustics.jl
-============
+##Examples
 
-**Usage example **
-'''
+**Usage example**
+```
 using Acoustics,LibSndFile
 pwd() #this will show where julia is looking for files
 cd("path you would like to go to")
@@ -25,10 +24,10 @@ a=load("Sports Hall UYork 441.aiff")[:,1]
 RT(a,60)
 
 
-'''
+```
 
-**Generic Options in all function **
-'''
+**Generic Options in all function**
+```
 every function independent of function specific parameters
 
 "Function name" (source,....(arbitary argument),weighting,band)
@@ -40,6 +39,6 @@ bands-this allows for multiband processing to be supported currently on 1/3 octa
 
 example: example: RT(a,60,"z","1/3")
 
-'''
+```
 
-##
+##Functions
