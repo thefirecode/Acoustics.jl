@@ -3,7 +3,7 @@
 module Acoustics
 using DSP,Distributions,WAV,Dierckx
 
-export general,c,l,RT,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,sinc
+export general,c,l,RT,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
 
 function general(source,weighting="z",band="b" ;s=1)
 
@@ -12,8 +12,6 @@ function general(source,weighting="z",band="b" ;s=1)
 	l=length(source)
 
 	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
 
 	elseif (weighting=="a")||(weighting=="A")
 
@@ -77,8 +75,6 @@ function c(source,time,weighting="z",bands="b" ;s=1)
 
 	elseif (weighting=="a")||(weighting=="A")
 
-	elseif (weighting=="a")||(weighting=="A")
-
 	elseif (weighting=="b")||(weighting=="B")
 
 	elseif (weighting=="c")||(weighting=="C")
@@ -130,8 +126,6 @@ function d(source,time,weighting="z",bands="b" ;s=1)
 
 
 	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
 
 	elseif (weighting=="a")||(weighting=="A")
 
@@ -189,8 +183,6 @@ function l(source,percent,weighting="z",band="b" ;s=1)
 
 	elseif (weighting=="a")||(weighting=="A")
 
-	elseif (weighting=="a")||(weighting=="A")
-
 	elseif (weighting=="b")||(weighting=="B")
 
 	elseif (weighting=="c")||(weighting=="C")
@@ -231,8 +223,6 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 
 	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
 
 	elseif (weighting=="a")||(weighting=="A")
 
@@ -384,17 +374,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 			total=schroeder[lo_range]
 		end
 
-
-
 		c,m=linreg(schroeder[hi_range:lo_range],sequence[hi_range:lo_range])
-
-
-		print("m*x+c \n")
-		print("\n")
-		print(c)
-		print("\n")
-		print(m)
-		print("\n")
 
 			return ((10^(-decay/20)-1)*c)/m
 
@@ -412,11 +392,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
-
-
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
-
-
 
 	return hcat(center,results)
 
@@ -435,8 +411,6 @@ function Ts(source,weighting="z",band="b" ;s=1)
 	t=linspace(0,l/samplerate,l)
 
 	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
 
 	elseif (weighting=="a")||(weighting=="A")
 
