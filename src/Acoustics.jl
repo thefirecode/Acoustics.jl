@@ -1,7 +1,7 @@
 #sample variable.samplerate
 #clarity ,Lq, RT time,strength
 module Acoustics
-using DSP,Distributions,WAV,Loess
+using DSP,Distributions,WAV,Dierckx
 
 export general,c,l,RT,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,sinc
 
@@ -247,7 +247,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 	end
 
-#numerical derivative method taken from "Numerical Evaluation of Derivatives of Functions"(2014) by S. B. Sahoo, M. Acharya and B. P. Acharya
+
 	function f(x)
 		samplerate=1.0*Int(x.samplerate)
 		x=abs2.(x)
@@ -267,12 +267,13 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		total=2
 
 
-	if x[1]>target[2]
+	if x[l]>target[2]
 
 		return Inf
 
 	else
 
+#samples the points to use for regression
 		while i < l
 
 			sampled_y=vcat(sampled_y,sum(x[i:l]))
@@ -282,13 +283,13 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 		end
 
-			sampled_y=vcat(sampled_y,x[1])
+			sampled_y=vcat(sampled_y,x[l])
 			sampled_x=vcat(sampled_x,sequence[l])
-			print(sampled_x)
-			model=loess(sampled_x,sampled_y)
+			#finishes adding all the points for regression
+			model=Spline1D(sampled_x,sampled_y)
 
-
-		schroeder=predict(model,sequence)
+#generates the regression for the shroeder plot
+			schroeder=evaluate(model,sequence)
 
 
 
@@ -330,10 +331,10 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 			hi_range=1
 		end
 
-
-		while total>=target[1]
-			total=schroeder[hi_range]
+		while (total>=target[1])&&(hi_range<l)
 			hi_range+=1
+			total=schroeder[hi_range]
+
 		end
 
 
@@ -375,16 +376,27 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 			lo_range=1
 		end
 
+		#reseting total so that a false value is not used
 		total=2
 
-		while total>=target[2]
-			total=schroeder[lo_range]
+		while (total>=target[2])&&(lo_range<l)
 			lo_range+=1
+			total=schroeder[lo_range]
 		end
+
+
 
 		c,m=linreg(schroeder[hi_range:lo_range],sequence[hi_range:lo_range])
 
-			return (10^(-decay/20)-c)/m
+
+		print("m*x+c \n")
+		print("\n")
+		print(c)
+		print("\n")
+		print(m)
+		print("\n")
+
+			return ((10^(-decay/20)-1)*c)/m
 
 		end
 
