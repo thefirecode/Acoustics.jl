@@ -374,7 +374,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 			total=schroeder[lo_range]
 		end
 
-		c,m=linreg(schroeder[hi_range:lo_range],sequence[hi_range:lo_range])
+		c,m=linreg(sequence[hi_range:lo_range],schroeder[hi_range:lo_range])
 
 			return ((10^(-decay/20)-1)*c)/m
 
