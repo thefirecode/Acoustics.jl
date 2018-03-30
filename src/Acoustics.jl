@@ -239,7 +239,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 
 	function f(x)
-		samplerate=1.0*Int(x.samplerate)
+		#samplerate=1.0*Int(x.samplerate)
 		x=abs2.(x)
 		max=sum(x)
 		x=reverse((/).(x,max))
