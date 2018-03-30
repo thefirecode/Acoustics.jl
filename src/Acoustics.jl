@@ -62,20 +62,7 @@ function general(source,weighting="z",band="b" ;s=1)
 	end
 
 end
-'''
-This is the function to calculate the acoustic clairity metric
 
-c(source,time,weighting,bands)
-
-source - this is an audio source obtained from LibSndFile and/or MP3
-
-time - the time in ms (milliseconds)
-
-weighting - this is the weighting applied to the signal before processing. Default is unwieghted.
-
-bands - this enables multiband filtering. Default is broadband processing.
-
-'''
 function C(source,time,weighting="z",bands="b" ;s=1)
 
 	samplerate=1.0*Int(source.samplerate)
