@@ -382,10 +382,6 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 		c,m=linreg(10*log.(10,sequence[hi_range:lo_range]),schroeder[hi_range:lo_range])
 
-
-		print(m)
-		print("\n")
-
 			return -60/m
 
 		end
