@@ -1,7 +1,7 @@
 #sample variable.samplerate
 #clarity ,Lq, RT time,strength
 module Acoustics
-using DSP,Distributions,WAV,Dierckx
+using DSP,Distributions,WAV,Dierckx,LibSndFile
 
 export general,C,L,RT,D,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
 
