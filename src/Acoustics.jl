@@ -220,6 +220,8 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 	samplerate=1.0*Int(source.samplerate)
 
 	l=length(source)
+	sampl_amount=Int(ceil(samplerate/1000))
+	sequence=linspace(0,l/samplerate,l)
 
 
 	if (weighting=="z")||(weighting=="Z")
@@ -251,11 +253,8 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		lo_range=1
 		sampled_y=[1.0]
 		sampled_x=[0.0]
-		sampl_amount=Int(ceil(samplerate/1000))
-		sequence=linspace(0,l/samplerate,l)
 		i=sampl_amount
 		total=2
-
 
 	if x[l]>target[2]
 
@@ -280,8 +279,6 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 #generates the regression for the shroeder plot
 			schroeder=evaluate(model,sequence)
-
-
 
 #the -5dB decay point
 		if 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[1]
@@ -326,7 +323,6 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 			total=schroeder[hi_range]
 
 		end
-
 
 		#decay level
 		if schroeder[Int(ceil((1-10^(-0.05))*l))]>target[2]
@@ -375,6 +371,11 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		end
 
 		c,m=linreg(sequence[hi_range:lo_range],schroeder[hi_range:lo_range])
+
+		print(c)
+		print("\n")
+		print(m)
+		print("\n")
 
 			return ((10^(-decay/20)-1)*c)/m
 
