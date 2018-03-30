@@ -3,7 +3,7 @@
 module Acoustics
 using DSP,Distributions,WAV,Dierckx
 
-export general,c,l,RT,d,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
+export general,C,L,RT,D,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
 
 function general(source,weighting="z",band="b" ;s=1)
 
@@ -62,8 +62,21 @@ function general(source,weighting="z",band="b" ;s=1)
 	end
 
 end
+'''
+This is the function to calculate the acoustic clairity metric
 
-function c(source,time,weighting="z",bands="b" ;s=1)
+c(source,time,weighting,bands)
+
+source - this is an audio source obtained from LibSndFile and/or MP3
+
+time - the time in ms (milliseconds)
+
+weighting - this is the weighting applied to the signal before processing. Default is unwieghted.
+
+bands - this enables multiband filtering. Default is broadband processing.
+
+'''
+function C(source,time,weighting="z",bands="b" ;s=1)
 
 	samplerate=1.0*Int(source.samplerate)
 	l=length(source)
@@ -118,7 +131,7 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:l])))
 
 end
 
-function d(source,time,weighting="z",bands="b" ;s=1)
+function D(source,time,weighting="z",bands="b" ;s=1)
 
 	samplerate=1.0*Int(source.samplerate)
 	l=length(source)
@@ -168,7 +181,7 @@ function d(source,time,weighting="z",bands="b" ;s=1)
 
 end
 
-function l(source,percent,weighting="z",band="b" ;s=1)
+function L(source,percent,weighting="z",band="b" ;s=1)
 # percentage in 0 to 100
 #source is the audio file
 #central limit approximation the lower and

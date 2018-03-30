@@ -7,7 +7,7 @@
 [![codecov.io](http://codecov.io/github/thefirecode/Acoustics.jl/coverage.svg?branch=master)](http://codecov.io/github/thefirecode/Acoustics.jl?branch=master)
 #Acoustics.jl
 
-##Examples
+## Examples
 
 **Usage example**
 ```
@@ -40,5 +40,3 @@ bands-this allows for multiband processing to be supported currently on 1/3 octa
 example: example: RT(a,60,"z","1/3")
 
 ```
-
-##Functions
