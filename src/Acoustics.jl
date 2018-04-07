@@ -470,6 +470,7 @@ end
 function swup(time,duration,f_1,f_2)
 #time seconds
 #duraction seconds
+#f_1<f_2
 	K=(duration*2*pi*f_1)/log((f_1)/(f_2))
 	L=duration/log((f_1)/(f_2))
 
@@ -481,6 +482,7 @@ end
 function iswup(time,duration,f_1,f_2)
 #time seconds
 #duraction seconds
+#f_1<f_2
 	K=(duration*2*pi*f_1)/log((f_1)/(f_2))
 	L=duration/log((f_1)/(f_2))
 	m=(2*pi*f_1)/((K/L)*exp((-time)/L))
@@ -503,6 +505,7 @@ end
 
 function sweep_windowed(duration,silence_duration,f_1,f_2,alpha,samplerate)
 	#duration in seconds
+	values=String.([duration,silence_duration,f_1,f_2,alpha,samplerate])
 	sequence=linspace(0,duration,samplerate*duration)
 	window=tukey(samplerate*duration,alpha)
 	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
@@ -510,13 +513,14 @@ function sweep_windowed(duration,silence_duration,f_1,f_2,alpha,samplerate)
 	silence=zeros(samplerate*silence_duration)
 	sweep=vcat(sweep,silence)
 	isweep=vcat(silence,isweep)
-	wavwrite(sweep,"sweep.wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM)
-	wavwrite(isweep,"inverse_sweep.wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM)
+	wavwrite(sweep,"Sweep Duration_"*values[1]*"_Silence_"*values[2]*"_Low Frequency_"*values[3]*"_High Frequency_"*values[4]*"_Alpha_"*values[5]*"Fs"*values[6]*".wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM)
+	wavwrite(isweep,"Inverse "*"Sweep Duration_"*values[1]*"_Silence_"*values[2]*"_Low Frequency_"*values[3]*"_High Frequency_"*values[4]*"_Alpha_"*values[5]*"Fs"*values[6]*".wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM)
 end
 
-function deconvolve_complex(sweep,measured)
+function deconvolve_complex(sweep,measured,name="")
 
 	l=length(sweep)
+	name=String(name)
 
 	sweep=fft(sweep)
 	measured=fft(measured)
@@ -527,13 +531,14 @@ function deconvolve_complex(sweep,measured)
 	iimp=imag(ifft(imp))
 	iimp=(/).(iimp,l)
 
-	return save("impulse real.wav",rimp[:,1]),save("impulse imag.wav",iimp[:,1])
+	return save(name*"impulse real.wav",rimp[:,1]),save(name*"impulse imag.wav",iimp[:,1])
 
 end
 
-function deconvolve(sweep,measured)
+function deconvolve(sweep,measured,name="")
 
 	l=length(sweep)
+	name=String(name)
 
 	sweep=fft(sweep)
 	measured=fft(measured)
@@ -543,7 +548,7 @@ function deconvolve(sweep,measured)
 	rimp=(/).(rimp,l)
 
 
-	return save("impulse.wav",rimp[:,1])
+	return save(name*"impulse.wav",rimp[:,1])
 end
 
 end
