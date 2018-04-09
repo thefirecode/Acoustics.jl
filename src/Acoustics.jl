@@ -280,92 +280,83 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 #generates the regression for the shroeder plot
 			schroeder=evaluate(model,sequence)
 
-#determines the steady state value
-			k=1
-			diffrence=0
-		while diffrence<=0.292
-
-			diffrence=abs(schroeder[1]-schroeder[k])
-			k+=1
-
-		end
 
 #the -5dB decay point
-		if 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[1]*schroeder[k]
+		if 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-5.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-4.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-3.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-2.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-1.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-0.5))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-0.4))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-0.3))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-0.2))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-0.1))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.05))*l))]>target[1]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.05))*l))]>target[1]
 			hi_range=Int(ceil((1-10^(-0.05))*l))
 
 		else
 			hi_range=1
 		end
 
-		while (total>=target[1]*schroeder[k])&&(hi_range<l)
+		while (total>=target[1])&&(hi_range<l)
 			hi_range+=1
 			total=schroeder[hi_range]
 
 		end
 
 		#decay level
-		if schroeder[Int(ceil((1-10^(-0.05))*l))]>target[2]*schroeder[k]
+		if schroeder[Int(ceil((1-10^(-0.05))*l))]>target[2]
 					lo_range=Int(ceil((1-10^(-0.05))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-0.1))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-0.2))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-0.3))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-0.4))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-0.5))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-1.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-2.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-3.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[2]*schroeder[k]
+		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-4.0))*l))
 
-		elseif 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[2]*schroeder[k]
+		elseif 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[2]
 			lo_range=Int(ceil((1-10^(-5.0))*l))
 
 		else
@@ -375,7 +366,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		#reseting total so that a false value is not used
 		total=2
 
-		while (total>=target[2]*schroeder[k])&&(lo_range<l)
+		while (total>=target[2])&&(lo_range<l)
 			lo_range+=1
 			total=schroeder[lo_range]
 		end
