@@ -244,6 +244,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		#samplerate=1.0*Int(x.samplerate)
 		x=abs2.(x)
 		max=sum(x)
+		#takes only the first channel
 		x=reverse((/).(x[:,1],max))
 		target=[(10^(-5/20)),(10^(-((decay+5)/20)))]
 
