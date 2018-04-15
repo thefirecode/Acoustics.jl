@@ -39,7 +39,7 @@ function general(source,weighting="z",band="b" ;s=1)
 
 
 
-	results=[filt(digitalfilter(bands[1],Butterworth(2)),source)]
+	results=[filt(digitalfilter(bands[1],Butterworth(4)),source)]
 
 
 	i=2
@@ -47,7 +47,7 @@ function general(source,weighting="z",band="b" ;s=1)
 	while length(bands)>=i
 
 
-		results=vcat(results,[filt(digitalfilter(bands[i],Butterworth(2)),source)])
+		results=vcat(results,[filt(digitalfilter(bands[i],Butterworth(4)),source)])
 
 		i+=1
 
@@ -105,7 +105,7 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:l])))
 
 
 
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(4)),source)),bands)
 
 	return hcat(center,results)
 
@@ -156,7 +156,7 @@ function D(source,time,weighting="z",bands="b" ;s=1)
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
 
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(4)),source)),bands)
 
 
 
@@ -205,7 +205,7 @@ function L(source,percent,weighting="z",band="b" ;s=1)
 
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(4)),source)),bands)
 
 	return hcat(center,results)
 
@@ -314,7 +314,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(4)),source)),bands)
 
 	return hcat(center,results)
 
@@ -369,7 +369,7 @@ function Ts(source,weighting="z",band="b" ;s=1)
 
 center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
 
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(2)),source)),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(4)),source)),bands)
 
 	return hcat(center,results)
 
