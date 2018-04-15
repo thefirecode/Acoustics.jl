@@ -548,6 +548,8 @@ function RT_cal(RT,length,samplerate)
 	sequence=linspace(0,length,length*samplerate)
 	rng=MersenneTwister(1234)
 	noise=randn!(rng,zeros(length*samplerate))
+	max=maximum([abs(maximum(noise)),abs(minimum(noise))])
+	noise=(/).(noise,max)
 	sequence=10.^(-(3/RT)*sequence)
 	out=(*).(sequence,noise)
 
