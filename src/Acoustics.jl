@@ -3,7 +3,7 @@
 module Acoustics
 using DSP,Distributions,WAV,Dierckx,LibSndFile
 
-export general,C,L,RT,D,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve
+export general,C,L,RT,D,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,RT_cal
 
 function general(source,weighting="z",band="b" ;s=1)
 
@@ -541,6 +541,19 @@ function deconvolve(sweep,measured,name="")
 
 
 	return save(name*"impulse.wav",rimp[:,1])
+end
+
+function RT_cal(RT,length,samplerate)
+	values=String.([RT,length])
+	sequence=linspace(0,length,length*samplerate)
+	rng=MersenneTwister(1234)
+	noise=randn!(rng,zeros(length*samplerate))
+	sequence=10^(-(3/RT)*sequence)
+	out=(*).(sequence,noise)
+
+
+	return save("RT Calibration Length "*values[1]*"Reverberation Time "*values[2]*".wav",out)
+
 end
 
 end
