@@ -1,7 +1,7 @@
 #sample variable.samplerate
 #clarity ,Lq, RT time,strength
 module Acoustics
-using DSP,Distributions,WAV,Dierckx,LibSndFile
+using DSP,Distributions,WAV,Dierckx
 
 export general,C,L,RT,D,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,RT_cal
 
@@ -523,7 +523,7 @@ function deconvolve_complex(sweep,measured,name="")
 	iimp=imag(ifft(imp))
 	iimp=(/).(iimp,l)
 
-	return save(name*"impulse real.wav",rimp[:,1]),save(name*"impulse imag.wav",iimp[:,1])
+	return wavwrite(rimp[:,1],name*" impulse real.wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM),wavwrite(iimp[:,1],name*" impulse imag.wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM)
 
 end
 
@@ -540,7 +540,7 @@ function deconvolve(sweep,measured,name="")
 	rimp=(/).(rimp,l)
 
 
-	return save(name*"impulse.wav",rimp[:,1])
+	return wavwrite(rimp[:,1],name*" impulse.wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM)
 end
 
 function RT_cal(RT,length,samplerate)
@@ -552,7 +552,7 @@ function RT_cal(RT,length,samplerate)
 	out=(*).(sequence,noise)
 
 
-	return save("RT Calibration Length "*values[1]*"Reverberation Time "*values[2]*".wav",out)
+	return wavwrite(out,"RT Calibration Length "*values[1]*" Reverberation Time "*values[2]*" .wav",Fs=samplerate,nbits=32,compression=WAVE_FORMAT_PCM)
 
 end
 
