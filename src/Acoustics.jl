@@ -291,6 +291,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		end
 
 		total=1
+		lo_range=hi_range
 		while (total>=target[2])&&(lo_range<l)
 			lo_range+=1
 			total=schroeder[lo_range]
@@ -469,7 +470,7 @@ end
 
 function RT_cal(RT,length,samplerate)
 	values=string.([RT,length])
-	sequence=linspace(0,length,round(length*samplerate)
+	sequence=linspace(0,length,round(length*samplerate))
 	rng=MersenneTwister(1234)
 	noise=randn!(rng,zeros(round(length*samplerate)))
 	max=maximum([abs(maximum(noise)),abs(minimum(noise))])
