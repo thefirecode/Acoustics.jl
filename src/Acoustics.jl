@@ -241,12 +241,11 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 
 	function f(x)
-		#samplerate=1.0*Int(x.samplerate)
 		x=abs2.(x)
 		max=sum(x)
 		#takes only the first channel
 		x=reverse((/).(x[:,1],max))
-		target=[(10^(-5/20)),(10^(-((decay+5)/20)))]
+		target=[(10^(-5/10)),(10^(-((decay+5)/10)))]
 
 
 #hi and low refer to level
@@ -283,96 +282,21 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 
 #the -5dB decay point
-		if 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-5.0))*l))
 
-		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-4.0))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-3.0))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-2.0))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-1.0))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-0.5))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-0.4))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-0.3))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-0.2))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-0.1))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.05))*l))]>target[1]
-			hi_range=Int(ceil((1-10^(-0.05))*l))
-
-		else
-			hi_range=1
-		end
-
+		total=1
 		while (total>=target[1])&&(hi_range<l)
 			hi_range+=1
 			total=schroeder[hi_range]
 
 		end
 
-		#decay level
-		if schroeder[Int(ceil((1-10^(-0.05))*l))]>target[2]
-					lo_range=Int(ceil((1-10^(-0.05))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.1))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-0.1))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.2))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-0.2))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.3))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-0.3))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.4))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-0.4))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-0.5))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-0.5))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-1.0))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-1.0))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-2.0))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-2.0))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-3.0))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-3.0))*l))
-
-		elseif schroeder[Int(ceil((1-10^(-4.0))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-4.0))*l))
-
-		elseif 	schroeder[Int(ceil((1-10^(-5.0))*l))]>target[2]
-			lo_range=Int(ceil((1-10^(-5.0))*l))
-
-		else
-			lo_range=1
-		end
-
-		#reseting total so that a false value is not used
-		total=2
-
+		total=1
 		while (total>=target[2])&&(lo_range<l)
 			lo_range+=1
 			total=schroeder[lo_range]
 		end
 
-		c,m=linreg(sequence[hi_range:lo_range]),10*log.(10,schroeder[hi_range:lo_range]))
+		c,m=linreg(sequence[hi_range:lo_range],10*log.(10,schroeder[hi_range:lo_range]))
 
 			return -60/m
 
@@ -545,9 +469,9 @@ end
 
 function RT_cal(RT,length,samplerate)
 	values=string.([RT,length])
-	sequence=linspace(0,length,length*samplerate)
+	sequence=linspace(0,length,round(length*samplerate)
 	rng=MersenneTwister(1234)
-	noise=randn!(rng,zeros(length*samplerate))
+	noise=randn!(rng,zeros(round(length*samplerate)))
 	max=maximum([abs(maximum(noise)),abs(minimum(noise))])
 	noise=(/).(noise,max)
 	sequence=10.^(-(3/RT)*sequence)
