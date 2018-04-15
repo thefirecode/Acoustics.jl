@@ -548,7 +548,7 @@ function RT_cal(RT,length,samplerate)
 	sequence=linspace(0,length,length*samplerate)
 	rng=MersenneTwister(1234)
 	noise=randn!(rng,zeros(length*samplerate))
-	sequence=10^(-(3/RT)*sequence)
+	sequence=10.^(-(3/RT)*sequence)
 	out=(*).(sequence,noise)
 
 
