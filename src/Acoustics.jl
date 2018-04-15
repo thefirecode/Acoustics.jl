@@ -544,7 +544,7 @@ function deconvolve(sweep,measured,name="")
 end
 
 function RT_cal(RT,length,samplerate)
-	values=String.([RT,length])
+	values=string.([RT,length])
 	sequence=linspace(0,length,length*samplerate)
 	rng=MersenneTwister(1234)
 	noise=randn!(rng,zeros(length*samplerate))
