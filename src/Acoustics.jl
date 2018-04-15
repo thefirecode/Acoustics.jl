@@ -223,7 +223,6 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 	sampl_amount=Int(ceil(samplerate/1000))
 	sequence=linspace(0,l/samplerate,l)
 
-
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
@@ -241,10 +240,15 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 
 	function f(x)
-		x=abs2.(x)
-		max=sum(x)
+
+		x=abs2.(1.0*x[:,1])
+
+		max=sum(x[:,1])
+
 		#takes only the first channel
 		x=reverse((/).(x[:,1],max))
+
+
 		target=[(10^(-5/10)),(10^(-((decay+5)/10)))]
 
 
@@ -253,8 +257,9 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 		lo_range=1
 		sampled_y=[1.0]
 		sampled_x=[0.0]
-		i=sampl_amount
+		i=l-sampl_amount
 		total=2
+		time=sampl_amount
 
 	if x[l]>target[2]
 
@@ -263,16 +268,17 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 	else
 
 #samples the points to use for regression
-		while i < l
+		while 0<i
 
-			sampled_y=vcat(sampled_y,sum(x[i:l]))
-			sampled_x=vcat(sampled_x,sequence[i])
+			sampled_y=vcat(sampled_y,sum(x[1:i]))
+			sampled_x=vcat(sampled_x,sequence[time])
 
-			i+=sampl_amount
+			i-=sampl_amount
+			time+=sampl_amount
 
 		end
 
-			sampled_y=vcat(sampled_y,x[l])
+			sampled_y=vcat(sampled_y,x[1])
 			sampled_x=vcat(sampled_x,sequence[l])
 			#finishes adding all the points for regression
 			model=Spline1D(sampled_x,sampled_y)
