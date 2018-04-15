@@ -5,7 +5,7 @@
 [![Coverage Status](https://coveralls.io/repos/thefirecode/Acoustics.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/thefirecode/Acoustics.jl?branch=master)
 
 [![codecov.io](http://codecov.io/github/thefirecode/Acoustics.jl/coverage.svg?branch=master)](http://codecov.io/github/thefirecode/Acoustics.jl?branch=master)
-#Acoustics.jl
+
 
 ## Examples
 
@@ -38,5 +38,22 @@ example: RT(a,60,"z")
 bands-this allows for multiband processing to be supported currently on 1/3 octave bands are supported
 
 example: example: RT(a,60,"z","1/3")
+
+```
+**Getting Library to work on all platforms**
+```
+The build problems on platforms comes from the fortran dependency in Dierckx
+
+Windows
+this is a non issue because .dll is downloaded by default 
+
+MacOS
+1. install homebrew (https://brew.sh/)
+2. type "brew install gcc"
+
+Linux
+install all fortran libraries till it works
+
+
 
 ```
