@@ -245,7 +245,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 	function f(x)
 
-		x=abs2.(1.0*real.(x[:,1]))
+		x=abs2.(1.0*x[:,1])
 
 		max=sum(x[:,1])
 
@@ -288,7 +288,7 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 			model=Spline1D(sampled_x,sampled_y)
 
 #generates the regression for the shroeder plot
-			schroeder=evaluate(model,sequence)
+			schroeder=abs.(evaluate(model,sequence))
 
 
 #the -5dB decay point
