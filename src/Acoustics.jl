@@ -448,6 +448,7 @@ end
 
 function deconvolve_complex(sweep,measured,name="")
 
+	samplerate=1.0*Int(sweep.samplerate)
 	l=length(sweep)
 	name=String(name)
 
@@ -466,6 +467,7 @@ end
 
 function deconvolve(sweep,measured,name="")
 
+	samplerate=1.0*Int(sweep.samplerate)
 	l=length(sweep)
 	name=String(name)
 
