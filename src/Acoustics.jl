@@ -434,7 +434,7 @@ end
 
 function sweep_windowed(duration,silence_duration,f_1,f_2,alpha,samplerate)
 	#duration in seconds
-	values=String.([duration,silence_duration,f_1,f_2,alpha,samplerate])
+	values=string.([duration,silence_duration,f_1,f_2,alpha,samplerate])
 	sequence=linspace(0,duration,samplerate*duration)
 	window=tukey(samplerate*duration,alpha)
 	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
