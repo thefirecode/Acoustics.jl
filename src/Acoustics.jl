@@ -3,7 +3,7 @@
 module Acoustics
 using DSP,Distributions,WAV,Dierckx
 
-export general,C,L,RT,D,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,RT_cal
+export general,C,L,RT,D,Ts,sweep,sweep_windowed,deconvolve_complex,deconvolve,RT_cal,EDT
 
 function general(source,weighting="z",band="b" ;s=1)
 
