@@ -336,6 +336,123 @@ function RT(source,decay,weighting="z",band="b" ;s=1)
 
 end
 
+function EDT(source,weighting="z",band="b" ;s=1)
+
+	samplerate=1.0*Int(source.samplerate)
+
+	l=length(source)
+	sampl_amount=Int(ceil(samplerate/1000))
+	sequence=linspace(0,l/samplerate,l)
+
+	if (weighting=="z")||(weighting=="Z")
+
+	elseif (weighting=="a")||(weighting=="A")
+
+	elseif (weighting=="b")||(weighting=="B")
+
+	elseif (weighting=="c")||(weighting=="C")
+
+	elseif (weighting=="d")||(weighting=="D")
+
+	else
+		return print("Weighting undefined")
+
+	end
+
+
+	function f(x)
+
+		x=abs2.(1.0*x[:,1])
+
+		max=sum(x[:,1])
+
+		#takes only the first channel
+		x=reverse((/).(x[:,1],max))
+
+
+		target=[1,(10^(-((10)/10)))]
+
+
+#hi and low refer to level
+		hi_range=1
+		lo_range=1
+		sampled_y=[1.0]
+		sampled_x=[0.0]
+		i=l-sampl_amount
+		total=2
+		time=sampl_amount
+
+	if x[l]>target[2]
+
+		return Inf
+
+	else
+
+#samples the points to use for regression
+		while 0<i
+
+			sampled_y=vcat(sampled_y,sum(x[1:i]))
+			sampled_x=vcat(sampled_x,sequence[time])
+
+			i-=sampl_amount
+			time+=sampl_amount
+
+		end
+
+			sampled_y=vcat(sampled_y,x[1])
+			sampled_x=vcat(sampled_x,sequence[l])
+			#finishes adding all the points for regression
+			model=Spline1D(sampled_x,sampled_y)
+
+#generates the regression for the shroeder plot
+			schroeder=abs.(evaluate(model,sequence))
+
+
+#the -5dB decay point
+
+		total=1
+		while (total>=target[1])&&(hi_range<l)
+			hi_range+=1
+			total=schroeder[hi_range]
+
+		end
+
+		lo_range=hi_range
+		while (total>=target[2])&&(lo_range<l)
+			lo_range+=1
+			total=schroeder[lo_range]
+		end
+
+		c,m=linreg(sequence[hi_range:lo_range],10*log.(10,schroeder[hi_range:lo_range]))
+
+			return -60/m
+
+		end
+
+	end
+
+	if (band=="b")||(band=="B")
+
+		return f(source)
+
+	elseif (band=="1/3")||(band=="1/3")
+
+	bands=[Bandpass(11.2,14.1;fs=samplerate),Bandpass(14.1,17.8;fs=samplerate),Bandpass(17.8,22.4;fs=samplerate),Bandpass(22.4,28.2;fs=samplerate),Bandpass(28.2,35.5;fs=samplerate),Bandpass(35.5,44.7;fs=samplerate),Bandpass(44.7,56.2;fs=samplerate),Bandpass(56.2,70.8;fs=samplerate),Bandpass(70.8,89.1;fs=samplerate),Bandpass(89.1,112;fs=samplerate),Bandpass(112,141;fs=samplerate),Bandpass(141,178;fs=samplerate),Bandpass(178,224;fs=samplerate),Bandpass(224,282;fs=samplerate),Bandpass(282,355;fs=samplerate),Bandpass(355,447;fs=samplerate),Bandpass(447,562;fs=samplerate),Bandpass(562,708;fs=samplerate),Bandpass(708,891;fs=samplerate),Bandpass(891,1122;fs=samplerate),Bandpass(1122,1413;fs=samplerate),Bandpass(1413,1778;fs=samplerate),Bandpass(1778,2239;fs=samplerate),Bandpass(2239,2818;fs=samplerate),Bandpass(2818,3548;fs=samplerate),Bandpass(3548,4467;fs=samplerate),Bandpass(4467,5623;fs=samplerate),Bandpass(5623,7079;fs=samplerate),Bandpass(7079,8913;fs=samplerate),Bandpass(8913,11220;fs=samplerate),Bandpass(11220,14130;fs=samplerate),Bandpass(14130,17780;fs=samplerate),Bandpass(17780, samplerate*0.5*0.99;fs=samplerate)]
+
+
+
+	center=[12.5,16,20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000]
+
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(4)),source)),bands)
+
+	return hcat(center,results)
+
+	else
+
+	end
+
+end
+
 function Ts(source,weighting="z",band="b" ;s=1)
 
 	samplerate=1.0*Int(source.samplerate)
