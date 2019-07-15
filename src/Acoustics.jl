@@ -25,18 +25,28 @@ function acoustic_load(path)
 	
 	p_beg=1
 
-	while (!(path[i]=='/'))
+	if((path[1]=='/'))
 
-		p_beg=i
+		while (!(path[i]=='/'))
 
-		i-=1
+			p_beg=i
+
+			i-=1
 		
+		end
+		temp=wavread(path)
+
+	else
+
+		path_h=pwd()
+		head_path=string(path_h,'/',path)
+		temp=wavread(head_path)
+		
+
 	end
 
 
 	if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
-
-	temp=wavread(path)
 	samples=temp[1]
 	samplerate=1.0*Int(temp[2])
 	
