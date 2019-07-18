@@ -4,6 +4,38 @@ using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,FFTW
 
 export general,C,RT,D,Ts,sweep,deconvolve_complex,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G
 
+
+"""
+# Acoustic Load 
+
+acoustic_load(path) - Loads file for processing by other functions in Acoustics.jl
+
+**path** - The location of the supported audio file. Must either be a fullpath or relative to the current working directory. to find the current working directory type pwd(). Look into julia shell for more information
+
+
+## Example
+
+`julia>` a=acoustic_load("Center Hi Sweep-5 impulse_short.wav") 
+
+The wav file has been loaded into the variable a
+
+`julia>` a.samples
+
+this is an array of individual samples from the loaded files
+
+`julia>` a.samplerate
+
+this is a float contianing the samplerate
+
+
+`julia>` a.name
+
+this is a string of the file name of imported file
+
+
+
+
+"""
 function acoustic_load(path)
 
 	i=length(path)
@@ -25,18 +57,28 @@ function acoustic_load(path)
 	
 	p_beg=1
 
-	while (!(path[i]=='/'))
+	if((path[1]=='/'))
 
-		p_beg=i
+		while (!(path[i]=='/'))
 
-		i-=1
+			p_beg=i
+
+			i-=1
 		
+		end
+		temp=wavread(path)
+
+	else
+
+		path_h=pwd()
+		head_path=string(path_h,'/',path)
+		temp=wavread(head_path)
+		
+
 	end
 
 
 	if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
-
-	temp=wavread(path)
 	samples=temp[1]
 	samplerate=1.0*Int(temp[2])
 	
@@ -110,8 +152,26 @@ function general(source,weighting="z",band="b" ;s=1)
 
 end
 
+"""
+# C - Clarity
+`C(source,time,weighting,bands)`-> dB
+
+* **Source** - the audio file loaded by acoustic_load
+* **Time** - (milliseconds)
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+C is known as Clarity it is the balance between early and late eneregy in an impulse expressed in Decibels (dB). Rooms with a positive C value will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for clarity metrics is 1 dB.
+
+### Recomendations
+* Use 50ms for rooms that will be used for music 
+* Use 80ms for rooms that will be used for speech 
 
 
+
+See ISO-3382 for more information
+"""
 function C(source,time,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -163,7 +223,28 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:l])))
 	end
 
 end
+"""
+# D - Definition
 
+`D(source,time,weighting,bands)` -> ratio (unitless)
+
+* **Source** - the audio file loaded by acoustic_load
+* **Time** - (milliseconds)
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+
+### Explation 
+D is known as Definition it is the balance between early and late eneregy in an impulse expressed as ratio. Rooms with a D ratio greater than one will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for definition metrics is 0,05.
+
+### Recomendations
+* Use 50ms for rooms that will be used for music 
+* Use 80ms for rooms that will be used for speech 
+
+
+
+See ISO-3382 for more information
+"""
 function D(source,time,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -216,7 +297,27 @@ function D(source,time,weighting="z",bands="b" ;s=1)
 
 end
 
+"""
+# RT - Reverberation Time
 
+`RT(source,decay,weighting,bands)` -> ratio (unitless)
+
+* **Source** - the audio file loaded by acoustic_load
+* **Decay** - The amount of level decay from steady state (dB)
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+
+### Explation 
+RT is known as Reverberation time it is the measure of decay from steady state to some level. 
+
+### Recomendations
+* normally measured in T20 & T30 
+
+
+See ISO-3382 for more information
+
+"""
 function RT(source,decay,weighting="z",band="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -439,6 +540,25 @@ function EDT(source,weighting="z",band="b" ;s=1)
 
 end
 
+"""
+# Ts- Centre Time
+`Ts(source,weighting,band)`-> milliseconds (ms)
+
+* **Source** - the audio file loaded by acoustic_load
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+Ts is the time centre which is centre of gravity of the squared impulse repose. It finds to find the center of energy of an impulse response. It is reported in milliseconds. Just Noticeable Diffrence (JND) for the Centre Time (Ts) metrics is 10ms.
+
+### Recomendations
+* Avoids the discrete division with C & D 
+* Good for finding strongest reflection location
+
+
+
+See ISO-3382 for more information
+"""
 function Ts(source,weighting="z",band="b" ;s=1)
 	
 	samplerate=source.samplerate
@@ -468,7 +588,7 @@ function Ts(source,weighting="z",band="b" ;s=1)
 		x=abs2.(x)
 		top=(*).(x,t)
 
-		return sum(top)/sum(x)
+		return (sum(top)/sum(x))*0.001
 
 	end
 
@@ -726,18 +846,19 @@ function sweep(duration,silence_duration,f_1,f_2,samplerate,alpha=0.01)
 	window=tukey(samplerate*duration,alpha)
 	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
 	isweep=(*).(swup.(sequence[end:-1:1],duration,f_1,f_2),iswup.(sequence,duration,f_1,f_2),window)
-	silence=zeros(samplerate*silence_duration)
+	silence=zeros(Int(floor(samplerate*silence_duration)))
 	sweep=vcat(sweep,silence)
 	isweep=vcat(silence,isweep)
 	wavwrite(sweep,"Sweep Duration_"*values[1]*"_Silence_"*values[2]*"_Low Frequency_"*values[3]*"_High Frequency_"*values[4]*"_Alpha_"*values[5]*"Fs"*values[6]*".wav",Fs=samplerate)
 	wavwrite(isweep,"Inverse "*"Sweep Duration_"*values[1]*"_Silence_"*values[2]*"_Low Frequency_"*values[3]*"_High Frequency_"*values[4]*"_Alpha_"*values[5]*"Fs"*values[6]*".wav",Fs=samplerate)
 end
 
-function deconvolve_complex(sweep,measured)
+function deconvolve(inverse,measured,name="")
 
-	l=length(sweep.samples)
+	l=length(measured.samples[:,1])
 	name=String(name)
 	samplerate=measured.samplerate
+	colmn=size(measured.samples)[2]
 
 	if length(name)==0
 
@@ -747,42 +868,45 @@ function deconvolve_complex(sweep,measured)
 
 	end
 
-	sweep=fft(sweep.samples)
+
+	if size(measured.samples)[2]<size(inverse.samples)[2]
+
+	print("fail")
+
+
+	elseif size(measured.samples)[2]==size(inverse.samples)[2]
+	
+	inverse=fft(inverse.samples)
 	measured=fft(measured.samples)
-	imp=(*).(measured,sweep)
-	rimp=real(ifft(imp))
-	#nomalization
-	rimp=(/).(rimp,l)
-	iimp=imag(ifft(imp))
-	iimp=(/).(iimp,l)
-
-	return wavwrite(rimp[:,1],name*" impulse real.wav",Fs=samplerate),wavwrite(iimp[:,1],name*" impulse imag.wav",Fs=samplerate)
-
-end
-
-function deconvolve(sweep,measured,name="")
-
-	l=length(sweep.samples)
-	name=String(name)
-	samplerate=measured.samplerate
-
-	if length(name)==0
-
-		name=measured.name
-	else
-		name=name
-
-	end
-
-	sweep=fft(sweep.samples)
-	measured=fft(measured.samples)
-	imp=(*).(measured,sweep)
+	imp=(*).(measured,inverse)
 	rimp=real(ifft(imp))
 	#nomalization
 	rimp=(/).(rimp,l)
 
 
 	return wavwrite(rimp[:,1],name*" impulse.wav",Fs=samplerate)
+
+	else
+	
+	inverse_old=inverse.samples
+
+	inverse=inverse.samples
+	
+	while size(inverse)[2]<colmn
+
+		inverse=hcat(inverse,inverse_old)	
+	end
+
+	inverse=fft(inverse)
+	measured=fft(measured.samples)
+	imp=(*).(measured,inverse)
+	rimp=real(ifft(imp))
+	#nomalization
+	rimp=(/).(rimp,l)
+
+	return wavwrite(rimp,name*" impulse.wav",Fs=samplerate)
+
+	end
 end
 
 
