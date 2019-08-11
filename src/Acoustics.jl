@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,FFTW
 
-export general,C,RT,D,Ts,sweep,deconvolve_complex,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G
+export general,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G
 
 function acoustic_load(path)
 
