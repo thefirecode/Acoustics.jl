@@ -6,7 +6,7 @@ export general,C,RT,D,Ts,sweep,deconvolve_complex,deconvolve,EDT,acoustic_load,S
 
 
 """
-# Acoustic Load 
+# Acoustic Load
 
 acoustic_load(path) - Loads file for processing by other functions in Acoustics.jl
 
@@ -15,7 +15,7 @@ acoustic_load(path) - Loads file for processing by other functions in Acoustics.
 
 ## Example
 
-`julia>` a=acoustic_load("Center Hi Sweep-5 impulse_short.wav") 
+`julia>` a=acoustic_load("Center Hi Sweep-5 impulse_short.wav")
 
 The wav file has been loaded into the variable a
 
@@ -47,14 +47,14 @@ function acoustic_load(path)
 		p_end=i
 
 		i-=1
-		
+
 	end
 
 	p_end=p_end-2
 
 	i=length(path)
 
-	
+
 	p_beg=1
 
 	if((path[1]=='/'))
@@ -64,7 +64,7 @@ function acoustic_load(path)
 			p_beg=i
 
 			i-=1
-		
+
 		end
 		temp=wavread(path)
 
@@ -73,7 +73,7 @@ function acoustic_load(path)
 		path_h=pwd()
 		head_path=string(path_h,'/',path)
 		temp=wavread(head_path)
-		
+
 
 	end
 
@@ -81,10 +81,10 @@ function acoustic_load(path)
 	if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
 	samples=temp[1]
 	samplerate=1.0*Int(temp[2])
-	
+
 	else
 
-		
+
 	end
 
 	return (samples=samples,samplerate=samplerate,name=path[p_beg:p_end])
@@ -165,8 +165,8 @@ end
 C is known as Clarity it is the balance between early and late eneregy in an impulse expressed in Decibels (dB). Rooms with a positive C value will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for clarity metrics is 1 dB.
 
 ### Recomendations
-* Use 50ms for rooms that will be used for music 
-* Use 80ms for rooms that will be used for speech 
+* Use 50ms for rooms that will be used for music
+* Use 80ms for rooms that will be used for speech
 
 
 
@@ -234,12 +234,12 @@ end
 * **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
 
 
-### Explation 
+### Explation
 D is known as Definition it is the balance between early and late eneregy in an impulse expressed as ratio. Rooms with a D ratio greater than one will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for definition metrics is 0,05.
 
 ### Recomendations
-* Use 50ms for rooms that will be used for music 
-* Use 80ms for rooms that will be used for speech 
+* Use 50ms for rooms that will be used for music
+* Use 80ms for rooms that will be used for speech
 
 
 
@@ -308,11 +308,11 @@ end
 * **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
 
 
-### Explation 
-RT is known as Reverberation time it is the measure of decay from steady state to some level. 
+### Explation
+RT is known as Reverberation time it is the measure of decay from steady state to some level.
 
 ### Recomendations
-* normally measured in T20 & T30 
+* normally measured in T20 & T30
 
 
 See ISO-3382 for more information
@@ -439,8 +439,8 @@ end
 * **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
 
 
-### Explation 
-EDT is known as Early Decay Time it is the measure of decay from peak to 10dB down. 
+### Explation
+EDT is known as Early Decay Time it is the measure of decay from peak to 10dB down.
 
 ### Recomendations
 * EDT is important as it correlates percieved reverberance
@@ -571,7 +571,7 @@ end
 Ts is the time centre which is centre of gravity of the squared impulse repose. It finds to find the center of energy of an impulse response. It is reported in milliseconds. Just Noticeable Diffrence (JND) for the Centre Time (Ts) metrics is 10ms.
 
 ### Recomendations
-* Avoids the discrete division with C & D 
+* Avoids the discrete division with C & D
 * Good for finding strongest reflection location
 
 
@@ -579,7 +579,7 @@ Ts is the time centre which is centre of gravity of the squared impulse repose. 
 See ISO-3382 for more information
 """
 function Ts(source,weighting="z",band="b" ;s=1)
-	
+
 	samplerate=source.samplerate
 
 	l=length(source.samples)
@@ -637,7 +637,25 @@ function Ts(source,weighting="z",band="b" ;s=1)
 
 end
 
+"""
+# ST_early- Early support
+`ST_early(source,weighting,band)`-> ratio (dB)
 
+* **Source** - the audio file loaded by acoustic_load
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+ST_early is the ratio of direct sound to the first 0.1 second of refelect sound. It is reported as a decibel ratio. It is a stage derived measurment and relates to a performer's experience.
+
+### Recomendations
+* Relates to how easy it is to hear other performers on a platform
+* When measured properly it exlcudes near by surfaces
+
+
+
+See ISO-3382 for more information
+"""
 function ST_early(source,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -692,7 +710,25 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 
 end
 
+"""
+# ST_late- Late support
+`ST_late(source,weighting,band)`-> ratio (dB)
 
+* **Source** - the audio file loaded by acoustic_load
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+ST_late is the ratio of direct sound to the first 0.1 second of refelect sound. It is reported as a decibel ratio. It is a stage derived measurment and relates to a performer's experience.
+
+### Recomendations
+* Relates to the percieved reverberation on performance platform
+* When measured it should be measured as close as possible to final stage setting
+
+
+
+See ISO-3382 for more information
+"""
 function ST_late(source,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -763,13 +799,29 @@ function IACC(source,weighting="z",bands="b" ;s=1)
 		top=(*).(x,conj.(y))
 		bottom=sqrt(sum((^).(x,2))*sum((^).(y,2)))
 
-		return maximum(real.((/).(top,bottom)))	
+		return maximum(real.((/).(top,bottom)))
 	end
 
 	return f(left,right)
 end
 
+"""
+# G- Strength
+`G(source,weighting,band)`-> ratio (dB)
 
+* **Source** - the audio file loaded by acoustic_load
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+G is the ratio of measurement location total power over free field total power. It is reported as a decibel ratio.
+
+### Recomendations
+* It can be obtained from numerous methods
+* It relates to the percieved loudness inside of a room
+
+See ISO-3382 for more information
+"""
 function G(source,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -778,7 +830,7 @@ function G(source,weighting="z",bands="b" ;s=1)
 	l=source[:,1]
 	l_10=source[:,2]
 
-	#x is direct and y is 10m 
+	#x is direct and y is 10m
 
 	function f(x,y)
 		x=sum(abs2.(x))
@@ -791,6 +843,24 @@ function G(source,weighting="z",bands="b" ;s=1)
 
 end
 
+
+"""
+# J_LF- Early Lateral Fraction
+`J_LF(source,weighting,band)`-> ratio
+
+* **Source** - the audio file loaded by acoustic_load
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+J_LF is the ratio between a figure-8 microphone microphone null pointed at the sound source and omnidirectional microphone at a measurement position in the first 80ms. It relates to the percieved width of a sound source.
+
+### Recomendations
+* It can be obtained from numerous methods
+* It relates to the percieved width of a rooom
+
+See ISO-3382 for more information
+"""
 function J_LF(source,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -801,7 +871,7 @@ function J_LF(source,weighting="z",bands="b" ;s=1)
 	time_1=Int(ceil(samplerate*0.005))
 	time_2=Int(ceil(samplerate*0.08))
 
-#x is the omni & y is the figure 8 
+#x is the omni & y is the figure 8
 	function f(x,y)
 		x=sum(abs2.(x[1:time_2]))
 		y=sum(abs2.(y[time_1:time_2]))
@@ -813,7 +883,23 @@ function J_LF(source,weighting="z",bands="b" ;s=1)
 
 end
 
+"""
+# L_j- Late Lateral Fraction
+`L_j(source,weighting,band)`-> ratio (dB)
 
+* **Source** - the audio file loaded by acoustic_load
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+L_j is the ratio between a figure-8 microphone microphone null pointed at the sound source and omnidirectional microphone at a measurement position for the length of the whole impulse. It relates to the percieved width of a sound source.
+
+### Recomendations
+* It can be obtained from numerous methods
+* It relates to the percieved spaciousness of the room
+
+See ISO-3382 for more information
+"""
 function L_j(source,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -823,7 +909,7 @@ function L_j(source,weighting="z",bands="b" ;s=1)
 	l_8=source[:,2]
 	time_1=Int(ceil(samplerate*0.08))
 
-#x is the omni & y is the figure 8 
+#x is the omni & y is the figure 8
 	function f(x,y)
 		x=sum(abs2.(x))
 		y=sum(abs2.(y[time_1:end]))
@@ -868,13 +954,13 @@ end
 * **F_1** - the start frequency (Hz) of the sweep
 * **F_2** - the end frequency (Hz) of the sweep
 * **Samplerate** - the samplerate (Hz) of the sine sweep
-* **α** -  the mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window 
+* **α** -  the mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window
 
 ### Explation
 Creates an expontential sine and inverse sweep in the current working directory. type pwd() to find the current working directory
 
 ### Recomendations
-* Avoid going all the way up to the nyquist frequency aliasing can occure due the change in frequency  
+* Avoid going all the way up to the nyquist frequency aliasing can occure due the change in frequency
 * make sure your sweep long enough to avoid aliasing
 
 
@@ -900,7 +986,7 @@ end
 # deconvolve- generates an impulsem response from an inverse sweep
 `deconvolve(inverse,measured,name="")`-> sweepname_impuse.wav
 
-* **Inverse** - the inverse sweep generated by sweep() 
+* **Inverse** - the inverse sweep generated by sweep()
 * **Measured** - the captured sweep generated by sweep() it must have the same number of samples per channel as inverse
 * **Name** - An optional name
 
@@ -938,7 +1024,7 @@ function deconvolve(inverse,measured,name="")
 
 
 	else size(measured.samples)[2]==size(inverse.samples)[2]
-	
+
 	inverse=fft(inverse.samples)
 	measured=fft(measured.samples)
 	imp=(*).(measured,inverse)
