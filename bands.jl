@@ -13,6 +13,17 @@ Class 2
 Elliptic(2,0.6,60)
 =#
 
+#=
+Bandpass(10^1.5,10^3.9,48000)
+
+=#
+
+Chebyshev1(2,0.2)
+
+ cwgt=digitalfilter(Bandpass(31.5,10^3.9,fs=48000),Butterworth(2))
+ cwgt=digitalfilter(Bandpass(20.466,12300,fs=48000),Butterworth(2))
+
+
 function fractional_range(b)
     return LinRange((-5*b),(4*b),(9*b)+1)
 end
