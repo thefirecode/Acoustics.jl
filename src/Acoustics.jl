@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,FFTW
 
-export general,C,RT,D,Ts,sweep,deconvolve_complex,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G
+export general,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target
 
 
 """
@@ -91,7 +91,7 @@ function acoustic_load(path)
 
 
 end
-
+#=
 function general(source,weighting="z",band="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -151,6 +151,7 @@ function general(source,weighting="z",band="b" ;s=1)
 	end
 
 end
+=#
 
 """
 # C - Clarity
@@ -638,19 +639,20 @@ function Ts(source,weighting="z",band="b" ;s=1)
 end
 
 """
-# ST_early- Early support
-`ST_early(source,weighting,band)`-> ratio (dB)
+# ST_early- Early Support
+`ST_early(source,weighting="z",bands="b")`-> ratio (dB)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
 
 ### Explation
-ST_early is the ratio of direct sound to the first 0.1 second of refelect sound. It is reported as a decibel ratio. It is a stage derived measurment and relates to a performer's experience.
+ST_early is the ratio of the reflectioned energy relative to the direct energy in the first 200th of a second to the first 10th of a second.
 
 ### Recomendations
-* Relates to how easy it is to hear other performers on a platform
-* When measured properly it exlcudes near by surfaces
+* Is a stage derived measurement is describes of sound of players in an orchestra
+* Describes the ease of hearing other members of the orchestra
+* The start time is based on the arrival of the direct sound
 
 
 
@@ -711,19 +713,20 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 end
 
 """
-# ST_late- Late support
-`ST_late(source,weighting,band)`-> ratio (dB)
+# ST_late- Late Support
+`ST_early(source,weighting="z",bands="b")`-> ratio (dB)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
 
 ### Explation
-ST_late is the ratio of direct sound to the first 0.1 second of refelect sound. It is reported as a decibel ratio. It is a stage derived measurment and relates to a performer's experience.
+ST_early is the ratio of the reflectioned energy relative to the direct energy in the first 10th of a second and 1 second.
 
 ### Recomendations
-* Relates to the percieved reverberation on performance platform
-* When measured it should be measured as close as possible to final stage setting
+* Is a stage derived measurement is describes of sound of players in an orchestra
+* Describes the percieved reverberance of a room
+* The start time is based on the arrival of the direct sound
 
 
 
@@ -783,7 +786,25 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 
 end
 
+"""
+# IACC- Inter-Aural Cross Correlation Coefficients
+`IACC(source,weighting="z",bands="b" ;s=1)`-> time (ms)
 
+* **Source** - the audio file loaded by acoustic_load
+* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+
+### Explation
+IACC is the point of maximum cross correlation between the left and right ears.
+
+### Recomendations
+* Correlates well with percieved spaciousness of a concert hall
+* Measures the diffrence of sound arrive at each ear
+
+
+
+See ISO-3382 for more information
+"""
 function IACC(source,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -805,23 +826,7 @@ function IACC(source,weighting="z",bands="b" ;s=1)
 	return f(left,right)
 end
 
-"""
-# G- Strength
-`G(source,weighting,band)`-> ratio (dB)
 
-* **Source** - the audio file loaded by acoustic_load
-* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
-
-### Explation
-G is the ratio of measurement location total power over free field total power. It is reported as a decibel ratio.
-
-### Recomendations
-* It can be obtained from numerous methods
-* It relates to the percieved loudness inside of a room
-
-See ISO-3382 for more information
-"""
 function G(source,weighting="z",bands="b" ;s=1)
 
 	samplerate=source.samplerate
@@ -842,8 +847,6 @@ function G(source,weighting="z",bands="b" ;s=1)
 	return f(l,l_10)
 
 end
-
-
 """
 # J_LF- Early Lateral Fraction
 `J_LF(source,weighting,band)`-> ratio
@@ -925,11 +928,9 @@ function swup(time,duration,f_1,f_2)
 #time seconds
 #duraction seconds
 #f_1<f_2
-	K=(duration*2*pi*f_1)/log((f_1)/(f_2))
-	L=duration/log((f_1)/(f_2))
-
-	return sin(K*(exp(-time/L)-1))
-
+	K=(duration*2*pi*f_1)/log((f_2)/(f_1))
+	L=duration/log((f_2)/(f_1))
+	return sin(K*(exp(time/L)-1))
 end
 
 #inverse generation
@@ -937,11 +938,9 @@ function iswup(time,duration,f_1,f_2)
 #time seconds
 #duraction seconds
 #f_1<f_2
-	L=duration/log10((f_2)/(f_1))
-	m=exp((-time)/L)
-
+	L=duration/log((f_2)/(f_1))
+	m=exp(-(time)/L)
 	return m
-
 end
 
 
@@ -954,53 +953,100 @@ end
 * **F_1** - the start frequency (Hz) of the sweep
 * **F_2** - the end frequency (Hz) of the sweep
 * **Samplerate** - the samplerate (Hz) of the sine sweep
-* **α** -  the mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window
+* **α** -  the mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
 
 ### Explation
-Creates an expontential sine and inverse sweep in the current working directory. type pwd() to find the current working directory
+The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard.
 
 ### Recomendations
-* Avoid going all the way up to the nyquist frequency aliasing can occure due the change in frequency
-* make sure your sweep long enough to avoid aliasing
-
+* The default value for α will provide a perfectly pop free experience but, cause a loss of high frequencies above 94.9125% of f_2
+* Use this to capture multiple channel impulse values.
+* type pwd() to find the current working directory
+* Avoid going all the way up to the nyquist frequency aliasing can occur due the change in frequency
 
 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
+See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function sweep(duration,silence_duration,f_1,f_2,samplerate,alpha=0.01)
+function sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01)
 	#duration in seconds
-	values=string.([duration,silence_duration,f_1,f_2,alpha,samplerate])
+	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
 	sequence=LinRange(0.0,duration,Int(floor(samplerate*duration)))
-	window=tukey(Int(floor(samplerate*duration)),alpha)
+	window=tukey(Int(floor(samplerate*duration)),α)
 	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
 	isweep=(*).(swup.(sequence[end:-1:1],duration,f_1,f_2),iswup.(sequence,duration,f_1,f_2),window)
 	silence=zeros(Int(floor(samplerate*silence_duration)))
 	sweep=vcat(sweep,silence)
 	isweep=vcat(silence,isweep)
-	wavwrite(sweep,"Sweep_Duration_"*values[1]*"_Silence_"*values[2]*"_Low Frequency_"*values[3]*"_High Frequency_"*values[4]*"_Alpha_"*values[5]*"Fs"*values[6]*".wav",Fs=samplerate)
-	wavwrite(isweep,"Inverse_"*"Sweep_Duration_"*values[1]*"_Silence_"*values[2]*"_Low_Frequency_"*values[3]*"_High_Frequency_"*values[4]*"_Alpha_"*values[5]*"Fs"*values[6]*".wav",Fs=samplerate)
+	wavwrite(sweep,"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
+	wavwrite(isweep,"Inverse_"*"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
 end
 
 
 """
-# deconvolve- generates an impulsem response from an inverse sweep
-`deconvolve(inverse,measured,name="")`-> sweepname_impuse.wav
+# sweep_target- adaptive Logarithmic Sine Sweep
+`sweep_target(duration,silence_duration,f_1,f_2,samplerate,alpha=0.0003)`-> sweep & inverse sweep in current working directory
 
-* **Inverse** - the inverse sweep generated by sweep()
-* **Measured** - the captured sweep generated by sweep() it must have the same number of samples per channel as inverse
-* **Name** - An optional name
+* **Duration** - this is the targeted duration of the sine sweep in seconds
+* **Silence Duration** - the duration of the silence following the sweep
+* **F_1** - the start frequency (Hz) of the sweep
+* **F_2** - the end frequency (Hz) of the sweep
+* **Samplerate** - the samplerate (Hz) of the sine sweep
+* **α** -  the mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
 
 ### Explation
-deconvolve is turns a sine sweep into an impulse response. A captured sweep must be turned into an impulse to be used inside this library. Using this function will create a WAV file but, will not load the file into memory. inverse should always be the generated file and only needs to be monophonic while the measured sweep can be multichannel. from a signal processing standpoint the channels can be swapped but, the functions automatic name comes from the measured channel.
+The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard. This function differs from sweep in that it tries to find an optimal duration that will cause the sweep function to end on zero. Allowing smaller α values which will reduce high frequency loss in the impulse. This function will always generate a duration smaller than the input duration.
 
 ### Recomendations
+* The default value for α will provide a perfectly pop free experience but, cause a loss of high frequencies above 99.825% of f_2
+* type pwd() to find the current working directory
+* Avoid going all the way up to the nyquist frequency aliasing can occur due the change in frequency
+
+
+See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
+See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
+"""
+function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003)
+	#duration in seconds
+	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
+	r=f_1*((exp(-log(f_2/f_1))-1)/log(f_2/f_1))
+	n_target=ceil(r*duration)
+	duration_target=n_target/r
+	sequence=LinRange(0.0,duration_target,Int(floor(samplerate*duration_target)))
+	window=tukey(Int(floor(samplerate*duration_target)),α)
+	sweep=(*).(swup.(sequence,duration_target,f_1,f_2),window)
+	isweep=(*).(swup.(sequence[end:-1:1],duration_target,f_1,f_2),iswup.(sequence,duration_target,f_1,f_2),window)
+	silence=zeros(Int(floor(samplerate*silence_duration)))
+	sweep=vcat(sweep,silence)
+	isweep=vcat(silence,isweep)
+	wavwrite(sweep,"Sweep-Duration_"*string(duration_target)*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
+	wavwrite(isweep,"Inverse_"*"Sweep-Duration_"*string(duration_target)*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
+end
+
+
+
+"""
+# Deconvolve-
+`deconvolve(inverse,measured,name="")`-> N-channel Wav file impulse
+
+* **Inverse** - This file should be monophonic inverse sweep file.
+* **Measured** - this should be the N channel capture sweep
+* **Name** - If you want to name the file something besides the name of the measured sweep with impulse appended
+
+### Explation
+Deconvolve converts a measured sweep into an impulse response using Logarithmic Sine Sweep Method.
+
+### Recomendations
+* Audio must be loaded with acoustic_load
+* The first argument must be a mono file inverse sweep
+* The measured file must be identical number of samples per channel as inverse file
 * Ardour will make sample accurate edits
 * Audacity will not make sample accurate edits
 * Type pwd() to find the where impulses are saved
 
 
-
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
+See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
 function deconvolve(inverse,measured,name="")
 
@@ -1028,12 +1074,12 @@ function deconvolve(inverse,measured,name="")
 	inverse=fft(inverse.samples)
 	measured=fft(measured.samples)
 	imp=(*).(measured,inverse)
-	rimp=ifft(imp)
+	rimp=real.(ifft(imp))
 	#nomalization
 	rimp=(/).(rimp,l)
 
 
-	return wavwrite(rimp,name*"_impulse.wav",Fs=samplerate)
+	return wavwrite(rimp,name*"-impulse.wav",Fs=samplerate)
 
 	end
 
