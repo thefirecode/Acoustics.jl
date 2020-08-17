@@ -201,12 +201,12 @@ end
 =#
 
 """
-# Leq - Clarity
-`Leq(source,weighting,bands)`-> dB
+# Leq -
+`Leq(source,weighting,bands=0)`-> dB
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 C is known as Clarity it is the balance between early and late eneregy in an impulse expressed in Decibels (dB). Rooms with a positive C value will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for clarity metrics is 1 dB.
@@ -215,11 +215,11 @@ C is known as Clarity it is the balance between early and late eneregy in an imp
 * Use 50ms for rooms that will be used for music
 * Use 80ms for rooms that will be used for speech
 
-
+Leq
 
 See ISO-3382 for more information
 """
-function Leq(source,weighting::String="z",bands::Int64=0 ;s=1)
+function Leq(source;weighting::String="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
 	source=source.samples
@@ -253,8 +253,18 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
 	center=gen_bands[2]
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
+	
+		if output=="shell"
 
-	return hcat(center,results)
+			return hcat(center,results)
+	
+		elseif output=="file"
+			
+			writecsv2("Leq_"*source.name*".csv",vcat(["Frequency (Hz)" "L"*weighting*"eq(dB)"],hcat(center,results)))
+				
+		else
+	
+		end
 
 	end
 
@@ -262,12 +272,12 @@ end
 
 """
 # C - Clarity
-`C(source,time,weighting,bands)`-> dB
+`C(source,time,weighting,bands=0)`-> dB
 
 * **Source** - the audio file loaded by acoustic_load
 * **Time** - (milliseconds)
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 C is known as Clarity it is the balance between early and late eneregy in an impulse expressed in Decibels (dB). Rooms with a positive C value will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for clarity metrics is 1 dB.
@@ -280,10 +290,12 @@ C is known as Clarity it is the balance between early and late eneregy in an imp
 
 See ISO-3382 for more information
 """
-function C(source,time::Number,weighting::String="z",bands::Int64=0 ;s=1)
+function C(source,time::Number;weighting::String="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
+	real_time=time
 	time=Int((time/1000.0)*source.samplerate)
+	name=source.name
 	source=source.samples
 
 	if (weighting=="z")||(weighting=="Z")
@@ -316,7 +328,20 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	return hcat(center,results)
+	
+		if output=="shell"
+
+			return hcat(center,results)
+	
+		elseif output=="file"
+			header=["Frequency (Hz)" "C"*string(real_time)*"(Weight="*weighting*") (dB)"]
+			file_output=vcat(header,string.(hcat(center,results)))
+			
+			writecsv2("C"*string(real_time)*"_"*name*".csv",file_output)
+				
+		else
+	
+		end
 
 	end
 
@@ -324,12 +349,12 @@ end
 """
 # D - Definition
 
-`D(source,time,weighting,bands)` -> ratio (unitless)
+`D(source,time,weighting,bands=0)` -> ratio (unitless)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Time** - (milliseconds)
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 
 ### Explation
@@ -343,10 +368,12 @@ D is known as Definition it is the balance between early and late eneregy in an 
 
 See ISO-3382 for more information
 """
-function D(source,time,weighting="z",bands::Int64=0 ;s=1)
+function D(source,time;weighting="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
+	real_time=time
 	time=Int((time/1000.0)*source.samplerate)
+	name=source.name
 	source=source.samples
 
 
@@ -365,7 +392,7 @@ function D(source,time,weighting="z",bands::Int64=0 ;s=1)
 	end
 
 #f(x) is the defined function
-	f(x)=sum(abs2.(x[1:time]))/sum(abs2.(x[time:l]))
+	f(x)=sum(abs2.(x[1:time]))/sum(abs2.(x[time:end]))
 
 	if (bands==0)||(bands==0)
 
@@ -379,7 +406,19 @@ function D(source,time,weighting="z",bands::Int64=0 ;s=1)
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	return hcat(center,results)
+		if output=="shell"
+
+			return hcat(center,results)
+	
+		elseif output=="file"
+			header=["Frequency (Hz)" "D"*string(real_time)*"(Weight="*weighting*")"]
+			file_output=vcat(header,string.(hcat(center,results)))
+			
+			writecsv2("D"*string(real_time)*"_"*name*".csv",file_output)
+				
+		else
+	
+		end
 
 	end
 
@@ -388,12 +427,12 @@ end
 """
 # RT - Reverberation Time
 
-`RT(source,decay,weighting,bands)` -> time (seconds)
+`RT(source,decay,weighting,bands=0)` -> time (seconds)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Decay** - The amount of level decay from steady state (dB)
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 
 ### Explation
@@ -406,11 +445,12 @@ RT is known as Reverberation time it is the measure of decay from steady state t
 See ISO-3382 for more information
 
 """
-function RT(source,decay,weighting="z",bands::Int64=0 ;s=1)
+function RT(source,decay;weighting="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
 	l=source.l_samples
 	sampl_amount=Int(ceil(samplerate/1000))
+	name=source.name
 	source=source.samples
 
 	if (weighting=="z")||(weighting=="Z")
@@ -506,7 +546,19 @@ function RT(source,decay,weighting="z",bands::Int64=0 ;s=1)
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	return hcat(center,results)
+		if output=="shell"
+
+			return hcat(center,results)
+	
+		elseif output=="file"
+			header=["Frequency (Hz)" "T"*string(decay)*" (Weight="*weighting*") (s)"]
+			file_output=vcat(header,string.(hcat(center,results)))
+			
+			writecsv2("T"*string(decay)*"_"*name*".csv",file_output)
+				
+		else
+	
+		end
 
 	end
 
@@ -515,11 +567,11 @@ end
 """
  EDT - Early Decay Time
 
-`EDT(source,decay,weighting,bands)` -> time (seconds)
+`EDT(source,decay,weighting,bands=0)` -> time (seconds)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 
 ### Explation
@@ -531,11 +583,12 @@ EDT is known as Early Decay Time it is the measure of decay from peak to 10dB do
 See ISO-3382 for more information
 
 """
-function EDT(source,weighting="z",bands::Int64=0 ;s=1)
+function EDT(source;weighting="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
 	l=source.l_samples
 	sampl_amount=Int(ceil(samplerate/1000))
+	name=source.name
 	source=source.samples
 
 	if (weighting=="z")||(weighting=="Z")
@@ -631,7 +684,19 @@ function EDT(source,weighting="z",bands::Int64=0 ;s=1)
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	return hcat(center,results)
+		if output=="shell"
+
+			return hcat(center,results)
+	
+		elseif output=="file"
+			header=["Frequency (Hz)" "Early Decay Time"*" (Weight="*weighting*") (s)"]
+			file_output=vcat(header,string.(hcat(center,results)))
+			
+			writecsv2("EDT_"*name*".csv",file_output)
+				
+		else
+	
+		end
 
 	end
 
@@ -639,11 +704,11 @@ end
 
 """
 # Ts- Centre Time
-`Ts(source,weighting,band)`-> milliseconds (ms)
+`Ts(source,weighting,band=0)`-> milliseconds (ms)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 Ts is the time centre which is centre of gravity of the squared impulse repose. It finds to find the center of energy of an impulse response. It is reported in milliseconds. Just Noticeable Diffrence (JND) for the Centre Time (Ts) metrics is 10ms.
@@ -656,14 +721,12 @@ Ts is the time centre which is centre of gravity of the squared impulse repose. 
 
 See ISO-3382 for more information
 """
-function Ts(source,weighting="z",bands::Int64=0 ;s=1)
+function Ts(source;weighting="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
-
 	l=source.l_samples
-
 	t=LinRange(0,l/samplerate,l)
-
+	name=source.name
 	source=source.samples
 
 	if (weighting=="z")||(weighting=="Z")
@@ -684,7 +747,7 @@ function Ts(source,weighting="z",bands::Int64=0 ;s=1)
 		x=abs2.(x)
 		top=(*).(x,t)
 
-		return (sum(top)/sum(x))*0.001
+		return (sum(top)/sum(x))*1000
 
 	end
 
@@ -701,7 +764,19 @@ function Ts(source,weighting="z",bands::Int64=0 ;s=1)
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	return hcat(center,results)
+		if output=="shell"
+
+			return hcat(center,results)
+	
+		elseif output=="file"
+			header=["Frequency (Hz)" "Time Centre "*" (Weight="*weighting*") (ms)"]
+			file_output=vcat(header,string.(hcat(center,results)))
+			
+			writecsv2("Ts_"*name*".csv",file_output)
+				
+		else
+	
+		end
 
 	end
 
@@ -709,11 +784,11 @@ end
 
 """
 # ST_early- Early Support
-`ST_early(source,weighting="z",bands="b")`-> ratio (dB)
+`ST_early(source,weighting="z",bands=0)`-> ratio (dB)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 ST_early is the ratio of the reflectioned energy relative to the direct energy in the first 200th of a second to the first 10th of a second.
@@ -727,9 +802,10 @@ ST_early is the ratio of the reflectioned energy relative to the direct energy i
 
 See ISO-3382 for more information
 """
-function ST_early(source,weighting="z",bands::Int64=0 ;s=1)
+function ST_early(source;weighting="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
+	name=source.name
 	source=source.samples
 
 	if (weighting=="z")||(weighting=="Z")
@@ -765,7 +841,19 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	return hcat(center,results)
+		if output=="shell"
+
+			return hcat(center,results)
+	
+		elseif output=="file"
+			header=["Frequency (Hz)" "Early Support (dB"*weighting*")"]
+			file_output=vcat(header,string.(hcat(center,results)))
+			
+			writecsv2("ST_early_"*name*".csv",file_output)
+				
+		else
+	
+		end
 
 	end
 
@@ -773,11 +861,11 @@ end
 
 """
 # ST_late- Late Support
-`ST_early(source,weighting="z",bands="b")`-> ratio (dB)
+`ST_early(source,weighting="z",bands=0)`-> ratio (dB)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 ST_early is the ratio of the reflectioned energy relative to the direct energy in the first 10th of a second and 1 second.
@@ -791,9 +879,10 @@ ST_early is the ratio of the reflectioned energy relative to the direct energy i
 
 See ISO-3382 for more information
 """
-function ST_late(source,weighting="z",bands::Int64=0 ;s=1)
+function ST_late(source;weighting="z",bands::Int64=0,output="shell")
 
 	samplerate=source.samplerate
+	name=source.name
 	source=source.samples
 
 	if (weighting=="z")||(weighting=="Z")
@@ -829,7 +918,19 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 	
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	return hcat(center,results)
+		if output=="shell"
+
+			return hcat(center,results)
+	
+		elseif output=="file"
+			header=["Frequency (Hz)" "Late Support (dB"*weighting*")"]
+			file_output=vcat(header,string.(hcat(center,results)))
+			
+			writecsv2("ST_late_"*name*".csv",file_output)
+				
+		else
+	
+		end
 
 	end
 
@@ -837,11 +938,11 @@ end
 
 """
 # IACC- Inter-Aural Cross Correlation Coefficients
-`IACC(source,weighting="z",bands="b" ;s=1)`-> time (ms)
+`IACC(source,weighting="z",bands=0 ;s=1)`-> time (ms)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 IACC is the point of maximum cross correlation between the left and right ears.
@@ -854,9 +955,10 @@ IACC is the point of maximum cross correlation between the left and right ears.
 
 See ISO-3382 for more information
 """
-function IACC(source,weighting="z",bands::Int64=0 ;s=1)
+function IACC(source;weighting="z",bands::Int64=0)
 
 	samplerate=source.samplerate
+	name=source.name
 	source=source.samples
 	left=source[:,1]
 	right=source[:,2]
@@ -901,7 +1003,7 @@ end
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 J_LF is the ratio between a figure-8 microphone microphone null pointed at the sound source and omnidirectional microphone at a measurement position in the first 80ms. It relates to the percieved width of a sound source.
@@ -912,9 +1014,10 @@ J_LF is the ratio between a figure-8 microphone microphone null pointed at the s
 
 See ISO-3382 for more information
 """
-function J_LF(source,weighting="z",bands::Int64=0 ;s=1)
+function J_LF(source;weighting="z",bands::Int64=0)
 
 	samplerate=source.samplerate
+	name=source.name
 	source=source.samples
 	l_o=source[:,1]
 	l_8=source[:,2]
@@ -937,9 +1040,9 @@ end
 # L_j- Late Lateral Fraction
 `L_j(source,weighting,band)`-> ratio (dB)
 
-* **Source** - the audio file loaded by acoustic_load
-* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - "b" (Broadband),"1/3" (third octave bands) [Default b]
+* **Source** - The audio file loaded by acoustic_load
+* **Weighting** - The frquency band weightings (Z,A,C,CCIR) [Default Z]
+* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 
 ### Explation
 L_j is the ratio between a figure-8 microphone microphone null pointed at the sound source and omnidirectional microphone at a measurement position for the length of the whole impulse. It relates to the percieved width of a sound source.
@@ -950,9 +1053,10 @@ L_j is the ratio between a figure-8 microphone microphone null pointed at the so
 
 See ISO-3382 for more information
 """
-function L_j(source,weighting="z",bands::Int64=0 ;s=1)
+function L_j(source;weighting="z",bands::Int64=0)
 
 	samplerate=source.samplerate
+	name=source.name
 	source=source.samples
 	l_o=source[:,1]
 	l_8=source[:,2]
@@ -994,12 +1098,12 @@ end
 # sweep- Logarithmic Sine Sweep
 `sweep(duration,silence_duration,f_1,f_2,samplerate,alpha=0.01)`-> sweep & inverse sweep in current working directory
 
-* **Duration** - the duration of the sine sweep in seconds
+* **Duration** - The duration of the sine sweep in seconds
 * **Silence Duration** - the duration of the silence following the sweep
-* **F_1** - the start frequency (Hz) of the sweep
-* **F_2** - the end frequency (Hz) of the sweep
-* **Samplerate** - the samplerate (Hz) of the sine sweep
-* **α** -  the mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
+* **F_1** - The start frequency (Hz) of the sweep
+* **F_2** - The end frequency (Hz) of the sweep
+* **Samplerate** - The samplerate (Hz) of the sine sweep
+* **α** -  The mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
 
 ### Explation
 The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard.
@@ -1033,12 +1137,12 @@ end
 # sweep_target- adaptive Logarithmic Sine Sweep
 `sweep_target(duration,silence_duration,f_1,f_2,samplerate,alpha=0.0003)`-> sweep & inverse sweep in current working directory
 
-* **Duration** - this is the targeted duration of the sine sweep in seconds
-* **Silence Duration** - the duration of the silence following the sweep
-* **F_1** - the start frequency (Hz) of the sweep
-* **F_2** - the end frequency (Hz) of the sweep
-* **Samplerate** - the samplerate (Hz) of the sine sweep
-* **α** -  the mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
+* **Duration** - This is the targeted duration of the sine sweep in seconds
+* **Silence Duration** - The duration of the silence following the sweep
+* **F_1** - The start frequency (Hz) of the sweep
+* **F_2** - The end frequency (Hz) of the sweep
+* **Samplerate** - The samplerate (Hz) of the sine sweep
+* **α** -  The mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
 
 ### Explation
 The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard. This function differs from sweep in that it tries to find an optimal duration that will cause the sweep function to end on zero. Allowing smaller α values which will reduce high frequency loss in the impulse. This function will always generate a duration smaller than the input duration.
@@ -1072,12 +1176,13 @@ end
 
 
 """
-# Deconvolve-
-`deconvolve(inverse,measured,name="")`-> N-channel Wav file impulse
+# Deconvolve - Generates impulse responses from sine sweeps
+`deconvolve(inverse,measured;title="",output="file")`-> N-channel Wav file impulse
 
 * **Inverse** - This file should be monophonic inverse sweep file.
-* **Measured** - this should be the N channel capture sweep
-* **Name** - If you want to name the file something besides the name of the measured sweep with impulse appended
+* **Measured** - This should be the N channel capture sweep
+* **Title** - If you want to name the file something besides the name of the measured sweep with impulse appended
+* **Output** - The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
 
 ### Explation
 Deconvolve converts a measured sweep into an impulse response using Logarithmic Sine Sweep Method.
@@ -1094,12 +1199,13 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function deconvolve(inverse,measured,title::String="")
+function deconvolve(inverse,measured;title::String="",output="file")
 
 	l=measured.l_samples
 	title=String(title)
 	samplerate=measured.samplerate
 	colmn=measured.channels
+	format=measured.format
 
 	if length(title)==0
 
@@ -1123,8 +1229,11 @@ function deconvolve(inverse,measured,title::String="")
 	#nomalization
 	rimp=(/).(rimp,l)
 
-
-	return wavwrite(rimp,title*"-impulse.wav",Fs=samplerate)
+	if output=="file"
+		return wavwrite(rimp,title*"-impulse.wav",Fs=samplerate)
+	elseif output=="acoustic_load"
+		return Acoustic(rimp,samplerate,title*"-impulse.wav",colmn,format,l)
+	end
 
 	end
 
