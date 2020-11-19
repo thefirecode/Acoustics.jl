@@ -26,6 +26,14 @@ RT(a,60)
 
 ```
 
+**Multichannel**
+```
+IACC - Channels:L,R from ummy head
+Lj,Jlfc & Jlf- channels: omni, Figure-8
+G - channels: at source, 10m
+
+```
+
 **Generic Options in all function**
 ```
 every function independent of function specific parameters
