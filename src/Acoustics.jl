@@ -1226,8 +1226,6 @@ function deconvolve(inverse,measured;title::String="",output="file")
 	measured=rfft(measured.samples)
 	imp=(*).(measured,inverse)
 	rimp=irfft(imp,l)
-	#nomalization
-	rimp=(/).(rimp,l)
 
 	if output=="file"
 		return wavwrite(rimp,title*"-impulse.wav",Fs=samplerate)
