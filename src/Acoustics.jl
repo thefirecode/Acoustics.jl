@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -227,9 +227,11 @@ function Leq(source;weighting::String="z",bands::Int64=0,output="shell")
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -247,23 +249,23 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-	
+
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
-			
+
 			writecsv2("Leq_"*source.name*".csv",vcat(["Frequency (Hz)" "L"*weighting*"eq(dB)"],hcat(center,results)))
-				
+
 		else
-	
+
 		end
 
 	end
@@ -301,9 +303,11 @@ function C(source,time::Number;weighting::String="z",bands::Int64=0,output="shel
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -311,6 +315,7 @@ function C(source,time::Number;weighting::String="z",bands::Int64=0,output="shel
 		return print("Weighting undefined")
 
 	end
+
 
 
 #f(x) is the defined function
@@ -321,26 +326,26 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
-	
+
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
 			header=["Frequency (Hz)" "C"*string(real_time)*"(Weight="*weighting*") (dB)"]
 			file_output=vcat(header,string.(hcat(center,results)))
-			
+
 			writecsv2("C"*string(real_time)*"_"*name*".csv",file_output)
-				
+
 		else
-	
+
 		end
 
 	end
@@ -380,9 +385,11 @@ function D(source,time;weighting="z",bands::Int64=0,output="shell")
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -390,6 +397,7 @@ function D(source,time;weighting="z",bands::Int64=0,output="shell")
 		return print("Weighting undefined")
 
 	end
+
 
 #f(x) is the defined function
 	f(x)=sum(abs2.(x[1:time]))/sum(abs2.(x[time:end]))
@@ -399,25 +407,25 @@ function D(source,time;weighting="z",bands::Int64=0,output="shell")
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
 			header=["Frequency (Hz)" "D"*string(real_time)*"(Weight="*weighting*")"]
 			file_output=vcat(header,string.(hcat(center,results)))
-			
+
 			writecsv2("D"*string(real_time)*"_"*name*".csv",file_output)
-				
+
 		else
-	
+
 		end
 
 	end
@@ -456,9 +464,11 @@ function RT(source,decay;weighting="z",bands::Int64=0,output="shell")
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -466,6 +476,7 @@ function RT(source,decay;weighting="z",bands::Int64=0,output="shell")
 		return print("Weighting undefined")
 
 	end
+
 
 
 	function f(x)
@@ -539,25 +550,25 @@ function RT(source,decay;weighting="z",bands::Int64=0,output="shell")
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
 			header=["Frequency (Hz)" "T"*string(decay)*" (Weight="*weighting*") (s)"]
 			file_output=vcat(header,string.(hcat(center,results)))
-			
+
 			writecsv2("T"*string(decay)*"_"*name*".csv",file_output)
-				
+
 		else
-	
+
 		end
 
 	end
@@ -594,9 +605,11 @@ function EDT(source;weighting="z",bands::Int64=0,output="shell")
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -604,6 +617,7 @@ function EDT(source;weighting="z",bands::Int64=0,output="shell")
 		return print("Weighting undefined")
 
 	end
+
 
 
 	function f(x)
@@ -677,25 +691,25 @@ function EDT(source;weighting="z",bands::Int64=0,output="shell")
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
 			header=["Frequency (Hz)" "Early Decay Time"*" (Weight="*weighting*") (s)"]
 			file_output=vcat(header,string.(hcat(center,results)))
-			
+
 			writecsv2("EDT_"*name*".csv",file_output)
-				
+
 		else
-	
+
 		end
 
 	end
@@ -732,9 +746,11 @@ function Ts(source;weighting="z",bands::Int64=0,output="shell")
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -742,6 +758,7 @@ function Ts(source;weighting="z",bands::Int64=0,output="shell")
 		return print("Weighting undefined")
 
 	end
+
 
 	function f(x)
 		x=abs2.(x)
@@ -757,25 +774,25 @@ function Ts(source;weighting="z",bands::Int64=0,output="shell")
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
 			header=["Frequency (Hz)" "Time Centre "*" (Weight="*weighting*") (ms)"]
 			file_output=vcat(header,string.(hcat(center,results)))
-			
+
 			writecsv2("Ts_"*name*".csv",file_output)
-				
+
 		else
-	
+
 		end
 
 	end
@@ -811,9 +828,11 @@ function ST_early(source;weighting="z",bands::Int64=0,output="shell")
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -821,6 +840,7 @@ function ST_early(source;weighting="z",bands::Int64=0,output="shell")
 		return print("Weighting undefined")
 
 	end
+
 
 time_1=Int(ceil(0.01*samplerate))
 time_2=Int(ceil(0.02*samplerate))
@@ -834,25 +854,25 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
 			header=["Frequency (Hz)" "Early Support (dB"*weighting*")"]
 			file_output=vcat(header,string.(hcat(center,results)))
-			
+
 			writecsv2("ST_early_"*name*".csv",file_output)
-				
+
 		else
-	
+
 		end
 
 	end
@@ -888,9 +908,11 @@ function ST_late(source;weighting="z",bands::Int64=0,output="shell")
 	if (weighting=="z")||(weighting=="Z")
 
 	elseif (weighting=="a")||(weighting=="A")
-
+		ifil=a_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="c")||(weighting=="C")
-
+		ifil=c_wtd(samplerate)
+		source=filt(ifil,source)
 	elseif (weighting=="ccir")||(weighting=="CCIR")
 		ifil=ccir(samplerate)
 		source=filt(ifil,source)
@@ -898,6 +920,7 @@ function ST_late(source;weighting="z",bands::Int64=0,output="shell")
 		return print("Weighting undefined")
 
 	end
+
 
 time_1=Int(ceil(0.01*samplerate))
 time_2=Int(ceil(0.1*samplerate))
@@ -911,25 +934,25 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 		return f(source)
 
 	else (bands>0)
-	
+
 	gen_bands=generateband(bands,samplerate)
 	bands=gen_bands[1]
 	center=gen_bands[2]
-	
+
 	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
 
 		if output=="shell"
 
 			return hcat(center,results)
-	
+
 		elseif output=="file"
 			header=["Frequency (Hz)" "Late Support (dB"*weighting*")"]
 			file_output=vcat(header,string.(hcat(center,results)))
-			
+
 			writecsv2("ST_late_"*name*".csv",file_output)
-				
+
 		else
-	
+
 		end
 
 	end
