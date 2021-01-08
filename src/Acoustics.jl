@@ -1245,10 +1245,21 @@ function deconvolve(inverse,measured;title::String="",output="file")
 
 	else measured.l_samples==inverse.l_samples
 
-	inverse=rfft(inverse.samples)
-	measured=rfft(measured.samples)
+	#find the next small product
+	padnum=nextprod([2,3,5,7,11,13,17],2*l)-l
+	
+	inver_zeros=zeros(typeof(inverse.samples[1]),padnum,1)
+	inver_pad=vcat(inverse.samples,inver_zeros)
+	inverse=rfft(inver_pad)
+	
+	mea_zeros=zeros(typeof(measured.samples[1]),padnum,colmn)
+	mea_pad=vcat(measured.samples,mea_zeros)
+	measured=rfft(mea_pad)
 	imp=(*).(measured,inverse)
-	rimp=irfft(imp,l)
+	rimp=irfft(imp,padnum+l)[end-l:end,:]
+	norm=maximum(abs.(rimp))
+	rimp=(/).(rimp,norm)
+
 
 	if output=="file"
 		return wavwrite(rimp,title*"-impulse.wav",Fs=samplerate)
