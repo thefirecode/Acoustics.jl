@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,sweep_energy,deconvolve_full
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -201,12 +201,13 @@ end
 =#
 
 """
-# Leq -
-`Leq(source,weighting,bands=0)`-> dB
+# Leq - time-averaged sound level or equivalent continuous sound level
+`Leq(source,weighting,bands=0,ref=1)`-> dB
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
+* **ref**
 
 ### Explation
 C is known as Clarity it is the balance between early and late eneregy in an impulse expressed in Decibels (dB). Rooms with a positive C value will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for clarity metrics is 1 dB.
@@ -217,12 +218,14 @@ C is known as Clarity it is the balance between early and late eneregy in an imp
 
 Leq
 
-See ISO-3382 for more information
+See ANSI/ASA S1.1-2013 for more information
 """
-function Leq(source;weighting::String="z",bands::Int64=0,output="shell")
+function Leq(source;weighting::String="z",bands::Int64=0,ref=1,output="shell")
 
 	samplerate=source.samplerate
+	l=source.l_samples
 	source=source.samples
+	
 
 	if (weighting=="z")||(weighting=="Z")
 
@@ -242,11 +245,20 @@ function Leq(source;weighting::String="z",bands::Int64=0,output="shell")
 
 
 #f(x) is the defined function
-f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
+function f(x,n,p_0)
+
+sig=abs2.(x)
+power=sum(sig)
+powerdb=10*log10(power)
+norm=10*log10(n*p_0^2)
+
+	return powerdb-norm
+
+end
 
 	if (bands==0)||(bands==0)
 
-		return f(source)
+		return f(source,l,ref)
 
 	else (bands>0)
 
@@ -254,7 +266,7 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
 	bands=gen_bands[1]
 	center=gen_bands[2]
 
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
+	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source),l,ref),bands)
 
 		if output=="shell"
 
@@ -262,7 +274,7 @@ f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
 
 		elseif output=="file"
 
-			writecsv2("Leq_"*source.name*".csv",vcat(["Frequency (Hz)" "L"*weighting*"eq(dB)"],hcat(center,results)))
+			writecsv2("Lt_"*source.name*".csv",vcat(["Frequency (Hz)" "L"*weighting*"eq(dB)"],hcat(center,results)))
 
 		else
 
@@ -1101,9 +1113,9 @@ function swup(time,duration,f_1,f_2)
 #time seconds
 #duraction seconds
 #f_1<f_2
-	K=(duration*2*pi*f_1)/log((f_2)/(f_1))
+	K=(duration*2*f_1)/log((f_2)/(f_1))
 	L=duration/log((f_2)/(f_1))
-	return sin(K*(exp(time/L)-1))
+	return sinpi(K*(exp(time/L)-1))
 end
 
 #inverse generation
@@ -1153,6 +1165,28 @@ function sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01)
 	isweep=vcat(silence,isweep)
 	wavwrite(sweep,"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
 	wavwrite(isweep,"Inverse_"*"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
+end
+function sweep_energy(duration,silence_duration,f_1,f_2,samplerate,α=0.01)
+	#duration in seconds
+	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
+	sequence=LinRange(0.0,duration,Int(floor(samplerate*duration)))
+	window=tukey(Int(floor(samplerate*duration)),α)
+	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
+	isweep=(*).(swup.(sequence[end:-1:1],duration,f_1,f_2),iswup.(sequence,duration,f_1,f_2),window)
+	sweep_pad=vcat(sweep,zeros(Int(floor(samplerate*duration)))) #zero padding sweep
+	isweep_pad=vcat(isweep,zeros(Int(floor(samplerate*duration)))) #zero padding inverse sweep
+	 #convolution of the signals
+	sweep_fft=rfft(sweep_pad) #taking real signal fourier transform of sweep
+	isweep_fft=rfft(isweep_pad) #taking real signal fourier transform of inverse sweep
+	combine=(*).(sweep_fft,isweep_fft) #convolution of signals
+	combine=irfft(combine,2*Int(floor(samplerate*duration))) # the inverse transform 
+	max_level=abs.(combine)
+	max_level=maximum(max_level)
+	combine=abs2.(combine) #absolute value squaring
+	combine=sum(combine) # summed all energy
+	combine=combine/samplerate #scaling by dx  the sample period
+	
+	return (combine,max_level)
 end
 
 
@@ -1205,8 +1239,8 @@ end
 * **Inverse** - This file should be monophonic inverse sweep file.
 * **Measured** - This should be the N channel capture sweep
 * **Title** - If you want to name the file something besides the name of the measured sweep with impulse appended
-* **Output** - The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
-
+* **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
+* **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
 ### Explation
 Deconvolve converts a measured sweep into an impulse response using Logarithmic Sine Sweep Method.
 
@@ -1217,12 +1251,13 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 * Ardour will make sample accurate edits
 * Audacity will not make sample accurate edits
 * Type pwd() to find the where impulses are saved
-
+* Do not use unnormalized as the signal will clip
+* Using other normalization you can do identity energy and identity peak amplitude 
 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function deconvolve(inverse,measured;title::String="",output="file")
+function deconvolve(inverse,measured;title::String="",norm::String="l",norm_o=1,output="file")
 
 	l=measured.l_samples
 	title=String(title)
@@ -1257,8 +1292,22 @@ function deconvolve(inverse,measured;title::String="",output="file")
 	measured=rfft(mea_pad)
 	imp=(*).(measured,inverse)
 	rimp=irfft(imp,padnum+l)[end-l:end,:]
-	norm=maximum(abs.(rimp))
-	rimp=(/).(rimp,norm)
+	if norm=="l"
+	#normalized by number of samples
+	normalizer=l
+	rimp=(/).(rimp,normalizer)
+	elseif norm=="n"
+	#Peak amplitude normalized
+	normalizer=maximum(abs.(rimp))
+	rimp=(/).(rimp,normalizer)
+	elseif norm=="u"
+	#unnormalized
+	else norm=="o"
+	#other
+	normalizer=norm_o
+	rimp=(/).(rimp,normalizer)
+	
+	end
 
 
 	if output=="file"
@@ -1270,8 +1319,5 @@ function deconvolve(inverse,measured;title::String="",output="file")
 	end
 
 end
-
-
-
 
 end # module
