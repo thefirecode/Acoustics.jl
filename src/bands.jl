@@ -133,7 +133,7 @@ function generateband(bands::Int64,samplerate::Real)
 	center_right=round.(centerz_right,digits=2)
 	centerz=(*).(center_right,centerz_pow)
 
-	return (vcat(Bandpass.(lower.(edgez[begin:(end-1)],bands),upper.(edgez[begin:(end-1)],bands),fs=samplerate),[Highpass(lower(edgez[end],bands),fs=samplerate)]),centerz)
+	return (vcat(Bandpass.(lower.(edgez[1:(end-1)],bands),upper.(edgez[1:(end-1)],bands),fs=samplerate),[Highpass(lower(edgez[end],bands),fs=samplerate)]),centerz)
 
 end
 
