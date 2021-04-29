@@ -1,22 +1,14 @@
-using Acoustics
-using Base.Test
+using Acoustics,Test
 
-
-RT_indef(x)=-((2.0^(-(6.0*x)-1))*(5.0^(-6.0*x)))/(3.0*log(10.0));
-
-single=(samples=(^).(10,((*).(-3,LinRange(0,10,480000)))),samplerate=48000.0,name="test"); #ten second RT60 1s
+single=Acoustics.Acoustic([1.0,2.0,3.0],convert(Float32,48000),"Bridgetower",convert(UInt16,1),0x04,3)
 
 # write your own tests here
-#@test 1 == 2
-@test round(RT(single,20),digits=2)==1.0
-@test round(C(single,80),digits=2)==round((10*log(10,(RT_indef(0)-RT_indef(0.08))/(RT_indef(0.08)-RT_indef(10)))),digits=2)
-@test round(D(single,80),digits=2)==round(((RT_indef(0)-RT_indef(0.08))/(RT_indef(0.08)-RT_indef(10))),digits=2)
-#@test round(EDT(single),digits=2)==(
-#@test Ts
-#@test ST_early
-#@test ST_late
-#@test IACC #stero
-#@test G
-#@test J_LF #stereo
-#@test L_j
+@test typeof(single.samples)==Array{Float64,1}
+@test typeof(single.samplerate)==Float32
+@test typeof(single.name)==String
+@test typeof(single.channels)==UInt16
+@test typeof(single.format)==UInt8
+@test typeof(single.l_samples)==Int64
+@test single.format==0x04
+
 
