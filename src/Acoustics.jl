@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,sweep_energy,deconvolve_full
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,deconvolve_full
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -1131,7 +1131,7 @@ end
 
 """
 # sweep- Logarithmic Sine Sweep
-`sweep(duration,silence_duration,f_1,f_2,samplerate,alpha=0.01)`-> sweep & inverse sweep in current working directory
+`sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01;inv_norm="p")`-> sweep & inverse sweep in current working directory
 
 * **Duration** - The duration of the sine sweep in seconds
 * **Silence Duration** - the duration of the silence following the sweep
@@ -1139,6 +1139,7 @@ end
 * **F_2** - The end frequency (Hz) of the sweep
 * **Samplerate** - The samplerate (Hz) of the sine sweep
 * **α** -  The mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
+* **inv_norm** - This is the normalization gain applied to the inverse sweep. The default value of "p" will normalize to the peak passband amplitude. "a" will normalize to the average passband amplitude. "e" will normalize to the total energy. All other values will cause the signal to be unnormalized.
 
 ### Explation
 The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard.
@@ -1148,51 +1149,131 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 * Use this to capture multiple channel impulse values.
 * type pwd() to find the current working directory
 * Avoid going all the way up to the nyquist frequency aliasing can occur due the change in frequency
+* Leave the inverse sweep normalization at either "p" or "a" the unnormalized sweep applies a pretty large gain in the passband and which will cause impulses to clip. 
+* If measuring the absolute energy is important then use "e" other wise it cause your signal to be extremely quiet for no benefit.
 
 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01)
+function sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01;inv_norm="p")
 	#duration in seconds
 	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
-	sequence=LinRange(0.0,duration,Int(floor(samplerate*duration)))
+	sequence=range(0.0,duration,length=Int(floor(samplerate*duration)))
 	window=tukey(Int(floor(samplerate*duration)),α)
 	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
 	isweep=(*).(swup.(sequence[end:-1:1],duration,f_1,f_2),iswup.(sequence,duration,f_1,f_2),window)
 	silence=zeros(Int(floor(samplerate*silence_duration)))
 	sweep=vcat(sweep,silence)
 	isweep=vcat(silence,isweep)
+	
+	#Amplitude Normalization
+	sweep_length=length(sweep)
+	padding_length=nextfastfft(2*sweep_length)-sweep_length
+	padding=zeros(padding_length)
+	sweep_fft=vcat(sweep,padding)
+	isweep_fft=vcat(isweep,padding)
+	sweep_fft=fft(sweep_fft)
+	isweep_fft=fft(isweep_fft)
+	conv=(*).(sweep_fft,isweep_fft)
+	length_conv=padding_length+sweep_length
+	bin=LinRange(0,(length_conv-1),length_conv)
+	norm_bin=(/).(bin,length_conv)
+	freq_bin=(*).(samplerate,norm_bin)
+	low_index=0
+	hi_index=0
+
+	if inv_norm=="p"
+		for n in 1:1:Int(floor(0.5*length_conv)+1)
+	
+			if freq_bin[n]==f_1
+				low_index=n
+			else 
+				if 1<n
+					if freq_bin[n-1]<f_1<freq_bin[n+1]
+						low_index=n
+					end
+				end
+		
+			end
+		
+			if f_2==(samplerate*0.5)
+				hi_index=Int(floor(0.5*length_conv)+1)
+			else
+				if freq_bin[n]==f_2
+					hi_index=n
+				else
+					if 1<n	
+						if freq_bin[n-1]<f_2<freq_bin[n+1]
+							hi_index=n
+						end
+					end
+				end
+			end
+
+		end
+
+		mag_conv=abs.(conv[low_index:hi_index])
+		mag_conv=maximum(mag_conv)
+		avg_amp=mag_conv
+		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Peak Passband Amplitude: ",avg_amp)
+		isweep=(/).(isweep,avg_amp)
+	elseif inv_norm=="a"
+		for n in 1:1:Int(floor(0.5*length_conv)+1)
+	
+			if freq_bin[n]==f_1
+				low_index=n
+			else 
+				if 1<n
+					if freq_bin[n-1]<f_1<freq_bin[n+1]
+						low_index=n
+					end
+				end
+		
+			end
+		
+			if f_2==(samplerate*0.5)
+				hi_index=Int(floor(0.5*length_conv)+1)
+			else
+				if freq_bin[n]==f_2
+					hi_index=n
+				else
+					if 1<n	
+						if freq_bin[n-1]<f_2<freq_bin[n+1]
+							hi_index=n
+						end
+					end
+				end
+			end
+
+		end
+
+		mag_conv=abs.(conv[low_index:hi_index])
+		mag_conv=sum(mag_conv)
+		avg_amp=mag_conv/(bin[hi_index]-bin[low_index])
+		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Average Passband Amplitude: ",avg_amp)
+		isweep=(/).(isweep,avg_amp)
+	elseif inv_norm=="e"
+		energy=abs2.(conv)
+		energy=sum(energy)/(2*pi)
+		isweep=(/).(isweep,energy)
+		println("Total Energy: ",energy)
+		
+	else
+		println("Unnormalized")
+	
+	end
+	
+	#work on the output
 	wavwrite(sweep,"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
 	wavwrite(isweep,"Inverse_"*"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
 end
-function sweep_energy(duration,silence_duration,f_1,f_2,samplerate,α=0.01)
-	#duration in seconds
-	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
-	sequence=LinRange(0.0,duration,Int(floor(samplerate*duration)))
-	window=tukey(Int(floor(samplerate*duration)),α)
-	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
-	isweep=(*).(swup.(sequence[end:-1:1],duration,f_1,f_2),iswup.(sequence,duration,f_1,f_2),window)
-	sweep_pad=vcat(sweep,zeros(Int(floor(samplerate*duration)))) #zero padding sweep
-	isweep_pad=vcat(isweep,zeros(Int(floor(samplerate*duration)))) #zero padding inverse sweep
-	 #convolution of the signals
-	sweep_fft=rfft(sweep_pad) #taking real signal fourier transform of sweep
-	isweep_fft=rfft(isweep_pad) #taking real signal fourier transform of inverse sweep
-	combine=(*).(sweep_fft,isweep_fft) #convolution of signals
-	combine=irfft(combine,2*Int(floor(samplerate*duration))) # the inverse transform 
-	max_level=abs.(combine)
-	max_level=maximum(max_level)
-	combine=abs2.(combine) #absolute value squaring
-	combine=sum(combine) # summed all energy
-	combine=combine/samplerate #scaling by dx  the sample period
-	
-	return (combine,max_level)
-end
+
 
 
 """
 # sweep_target- adaptive Logarithmic Sine Sweep
-`sweep_target(duration,silence_duration,f_1,f_2,samplerate,alpha=0.0003)`-> sweep & inverse sweep in current working directory
+`sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003;inv_norm="p")`-> sweep & inverse sweep in current working directory
 
 * **Duration** - This is the targeted duration of the sine sweep in seconds
 * **Silence Duration** - The duration of the silence following the sweep
@@ -1200,6 +1281,7 @@ end
 * **F_2** - The end frequency (Hz) of the sweep
 * **Samplerate** - The samplerate (Hz) of the sine sweep
 * **α** -  The mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
+* **inv_norm** - This is the normalization gain applied to the inverse sweep. The default value of "p" will normalize to the peak passband amplitude. "a" will normalize to the average passband amplitude. "e" will normalize to the total energy. All other values will cause the signal to be unnormalized.
 
 ### Explation
 The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard. This function differs from sweep in that it tries to find an optimal duration that will cause the sweep function to end on zero. Allowing smaller α values which will reduce high frequency loss in the impulse. This function will always generate a duration smaller than the input duration.
@@ -1208,12 +1290,14 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 * The default value for α will provide a perfectly pop free experience but, cause a loss of high frequencies above 99.825% of f_2
 * type pwd() to find the current working directory
 * Avoid going all the way up to the nyquist frequency aliasing can occur due the change in frequency
+* Leave the inverse sweep normalization at either "p" or "a" the unnormalized sweep applies a pretty large gain in the passband and which will cause impulses to clip. 
+* If measuring the absolute energy is important then use "e" other wise it cause your signal to be extremely quiet for no benefit.
 
 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003)
+function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003;inv_norm="p")
 	#duration in seconds
 	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
 	r=f_1*((exp(-log(f_2/f_1))-1)/log(f_2/f_1))
@@ -1224,6 +1308,104 @@ function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003)
 	sweep=(*).(swup.(sequence,duration_target,f_1,f_2),window)
 	isweep=(*).(swup.(sequence[end:-1:1],duration_target,f_1,f_2),iswup.(sequence,duration_target,f_1,f_2),window)
 	silence=zeros(Int(floor(samplerate*silence_duration)))
+	
+	#Amplitude Normalization
+	sweep_length=length(sweep)
+	padding_length=nextfastfft(2*sweep_length)-sweep_length
+	padding=zeros(padding_length)
+	sweep_fft=vcat(sweep,padding)
+	isweep_fft=vcat(isweep,padding)
+	sweep_fft=fft(sweep_fft)
+	isweep_fft=fft(isweep_fft)
+	conv=(*).(sweep_fft,isweep_fft)
+	length_conv=padding_length+sweep_length
+	bin=LinRange(0,(length_conv-1),length_conv)
+	norm_bin=(/).(bin,length_conv)
+	freq_bin=(*).(samplerate,norm_bin)
+	low_index=0
+	hi_index=0
+
+	if inv_norm=="p"
+		for n in 1:1:Int(floor(0.5*length_conv)+1)
+	
+			if freq_bin[n]==f_1
+				low_index=n
+			else 
+				if 1<n
+					if freq_bin[n-1]<f_1<freq_bin[n+1]
+						low_index=n
+					end
+				end
+		
+			end
+		
+			if f_2==(samplerate*0.5)
+				hi_index=Int(floor(0.5*length_conv)+1)
+			else
+				if freq_bin[n]==f_2
+					hi_index=n
+				else
+					if 1<n	
+						if freq_bin[n-1]<f_2<freq_bin[n+1]
+							hi_index=n
+						end
+					end
+				end
+			end
+
+		end
+
+		mag_conv=abs.(conv[low_index:hi_index])
+		mag_conv=maximum(mag_conv)
+		avg_amp=mag_conv
+		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Peak Passband Amplitude: ",avg_amp)
+		isweep=(/).(isweep,avg_amp)
+	elseif inv_norm=="a"
+		for n in 1:1:Int(floor(0.5*length_conv)+1)
+	
+			if freq_bin[n]==f_1
+				low_index=n
+			else 
+				if 1<n
+					if freq_bin[n-1]<f_1<freq_bin[n+1]
+						low_index=n
+					end
+				end
+		
+			end
+		
+			if f_2==(samplerate*0.5)
+				hi_index=Int(floor(0.5*length_conv)+1)
+			else
+				if freq_bin[n]==f_2
+					hi_index=n
+				else
+					if 1<n	
+						if freq_bin[n-1]<f_2<freq_bin[n+1]
+							hi_index=n
+						end
+					end
+				end
+			end
+
+		end
+
+		mag_conv=abs.(conv[low_index:hi_index])
+		mag_conv=sum(mag_conv)
+		avg_amp=mag_conv/(bin[hi_index]-bin[low_index])
+		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Average Passband Amplitude: ",avg_amp)
+		isweep=(/).(isweep,avg_amp)
+	elseif inv_norm=="e"
+		energy=abs2.(conv)
+		energy=sum(energy)/(2*pi)
+		isweep=(/).(isweep,energy)
+		println("Total Energy: ",energy)
+		
+	else
+		println("Unnormalized")
+	
+	end
+	
 	sweep=vcat(sweep,silence)
 	isweep=vcat(silence,isweep)
 	wavwrite(sweep,"Sweep-Duration_"*string(duration_target)*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
@@ -1234,13 +1416,14 @@ end
 
 """
 # Deconvolve - Generates impulse responses from sine sweeps
-`deconvolve(inverse,measured;title="",output="file")`-> N-channel Wav file impulse
+`deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,output="file")`-> N-channel Wav file impulse
 
 * **Inverse** - This file should be monophonic inverse sweep file.
 * **Measured** - This should be the N channel capture sweep
 * **Title** - If you want to name the file something besides the name of the measured sweep with impulse appended
 * **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
 * **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
+* **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels. 
 ### Explation
 Deconvolve converts a measured sweep into an impulse response using Logarithmic Sine Sweep Method.
 
@@ -1257,7 +1440,7 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function deconvolve(inverse,measured;title::String="",norm::String="l",norm_o=1,output="file")
+function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,output="file")
 
 	l=measured.l_samples
 	title=String(title)
