@@ -1297,7 +1297,7 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003;inv_norm="p")
+function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.001;inv_norm="p")
 	#duration in seconds
 	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
 	r=f_1*((exp(-log(f_2/f_1))-1)/log(f_2/f_1))
@@ -1423,7 +1423,8 @@ end
 * **Title** - If you want to name the file something besides the name of the measured sweep with impulse appended
 * **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
 * **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
-* **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels. 
+* **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels.
+* **lp** - "f" -full impulse & "h"- for half + 1 
 ### Explation
 Deconvolve converts a measured sweep into an impulse response using Logarithmic Sine Sweep Method.
 
@@ -1440,7 +1441,7 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,output="file")
+function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp="h",output="file")
 
 	l=measured.l_samples
 	title=String(title)
@@ -1474,7 +1475,17 @@ function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,
 	mea_pad=vcat(measured.samples,mea_zeros)
 	measured=rfft(mea_pad)
 	imp=(*).(measured,inverse)
-	rimp=irfft(imp,padnum+l)[end-l:end,:]
+	rimp=irfft(imp,padnum+l)
+	if lp=="l"
+		
+	elseif lp=="h"
+		rimp=rimp[(end-Int(((padnum+l)/2)-1)):end,:]
+	else
+	
+	end
+	
+	
+	
 	if norm=="l"
 	#normalized by number of samples
 	normalizer=l
