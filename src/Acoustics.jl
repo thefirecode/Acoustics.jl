@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,deconvolve_full
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -202,21 +202,20 @@ end
 
 """
 # Leq - time-averaged sound level or equivalent continuous sound level
-`Leq(source,weighting,bands=0,ref=1)`-> dB
+`Leq(source,weighting,bands=0,ref=1,output="shell")`-> dB
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
-* **ref**
+* **ref** - This is the reference level this will scale your recording to the proper level
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
-C is known as Clarity it is the balance between early and late eneregy in an impulse expressed in Decibels (dB). Rooms with a positive C value will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for clarity metrics is 1 dB.
+This is the average sound level over the whole file 
 
 ### Recomendations
-* Use 50ms for rooms that will be used for music
-* Use 80ms for rooms that will be used for speech
-
-Leq
+* Use this to find the signal to noise ratio
+* Use this to find longterm noise level
 
 See ANSI/ASA S1.1-2013 for more information
 """
@@ -286,12 +285,13 @@ end
 
 """
 # C - Clarity
-`C(source,time,weighting,bands=0)`-> dB
+`C(source,time,weighting,bands=0,output="shell")`-> dB
 
 * **Source** - the audio file loaded by acoustic_load
 * **Time** - (milliseconds)
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
 C is known as Clarity it is the balance between early and late eneregy in an impulse expressed in Decibels (dB). Rooms with a positive C value will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for clarity metrics is 1 dB.
@@ -366,13 +366,13 @@ end
 """
 # D - Definition
 
-`D(source,time,weighting,bands=0)` -> ratio (unitless)
+`D(source,time,weighting,bands=0,output="shell")` -> ratio (unitless)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Time** - (milliseconds)
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
-
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
 D is known as Definition it is the balance between early and late eneregy in an impulse expressed as ratio. Rooms with a D ratio greater than one will have greater percieved definition or clarity in reverberance.The Just Noticeable Diffrence (JND) for definition metrics is 0,05.
@@ -447,13 +447,13 @@ end
 """
 # RT - Reverberation Time
 
-`RT(source,decay,weighting,bands=0)` -> time (seconds)
+`RT(source,decay,weighting,bands=0,output="shell")` -> time (seconds)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Decay** - The amount of level decay from steady state (dB)
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
-
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
 RT is known as Reverberation time it is the measure of decay from steady state to some level.
@@ -590,12 +590,12 @@ end
 """
  EDT - Early Decay Time
 
-`EDT(source,decay,weighting,bands=0)` -> time (seconds)
+`EDT(source,decay,weighting,bands=0,output="shell")` -> time (seconds)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
-
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
 EDT is known as Early Decay Time it is the measure of decay from peak to 10dB down.
@@ -730,11 +730,12 @@ end
 
 """
 # Ts- Centre Time
-`Ts(source,weighting,band=0)`-> milliseconds (ms)
+`Ts(source,weighting,band=0,output="shell")`-> milliseconds (ms)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
 Ts is the time centre which is centre of gravity of the squared impulse repose. It finds to find the center of energy of an impulse response. It is reported in milliseconds. Just Noticeable Diffrence (JND) for the Centre Time (Ts) metrics is 10ms.
@@ -813,11 +814,12 @@ end
 
 """
 # ST_early- Early Support
-`ST_early(source,weighting="z",bands=0)`-> ratio (dB)
+`ST_early(source,weighting="z",bands=0,output="shell")`-> ratio (dB)
 
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
 ST_early is the ratio of the reflectioned energy relative to the direct energy in the first 200th of a second to the first 10th of a second.
@@ -898,6 +900,7 @@ end
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
+* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
 
 ### Explation
 ST_early is the ratio of the reflectioned energy relative to the direct energy in the first 10th of a second and 1 second.
@@ -978,6 +981,7 @@ end
 * **Source** - the audio file loaded by acoustic_load
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
+
 
 ### Explation
 IACC is the point of maximum cross correlation between the left and right ears.
@@ -1416,7 +1420,7 @@ end
 
 """
 # Deconvolve - Generates impulse responses from sine sweeps
-`deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,output="file")`-> N-channel Wav file impulse
+`deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp="h",output="file")`-> N-channel Wav file impulse
 
 * **Inverse** - This file should be monophonic inverse sweep file.
 * **Measured** - This should be the N channel capture sweep
@@ -1424,7 +1428,7 @@ end
 * **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
 * **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
 * **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels.
-* **lp** - "f" -full impulse & "h"- for half + 1 
+* **lp** - 1 -full doubled sided impulse & lp>1- cuts from that sample to the end
 ### Explation
 Deconvolve converts a measured sweep into an impulse response using Logarithmic Sine Sweep Method.
 
@@ -1441,7 +1445,7 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp="h",output="file")
+function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp::Int=1,output="file")
 
 	l=measured.l_samples
 	title=String(title)
@@ -1458,16 +1462,16 @@ function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,
 	end
 
 
-	if measured.l_samples<inverse.l_samples
+	if (((measured.l_samples-inverse.l_samples)/measured.l_samples)<-0.01)
 
-		error("Measured sweep has less samples than the generated sweep")
+		error("The Measure sweep has a sample length difference greater than 1%. Try re-editing your measured sweep")
 
 	else measured.l_samples==inverse.l_samples
 
 	#find the next small product
 	padnum=nextprod([2,3,5,7,11,13,17],2*l)-l
 	
-	inver_zeros=zeros(typeof(inverse.samples[1]),padnum,1)
+	inver_zeros=zeros(typeof(inverse.samples[1]),(nextprod([2,3,5,7,11,13,17],2*l)-inverse.l_samples),1)
 	inver_pad=vcat(inverse.samples,inver_zeros)
 	inverse=rfft(inver_pad)
 	
@@ -1476,14 +1480,13 @@ function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,
 	measured=rfft(mea_pad)
 	imp=(*).(measured,inverse)
 	rimp=irfft(imp,padnum+l)
-	if lp=="l"
-		
-	elseif lp=="h"
-		rimp=rimp[(end-Int(((padnum+l)/2)-1)):end,:]
+	
+	if lp>0
+
+		rimp=rimp[lp:end,:]
 	else
-	
+		error("you input a negative value it cannot not be cut from here")	
 	end
-	
 	
 	
 	if norm=="l"
@@ -1513,5 +1516,38 @@ function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,
 	end
 
 end
+
+"""
+# Peak_loc - gets index of maximum sample value
+`peak_loc(imp)`-> (samples,seconds)
+
+* **Imp** - This file should be monophonic full length impulse response.
+
+### Explation
+Find the index of the maximum samples level.
+
+### Recomendations
+* This function can be used to calibrate the start time of your impulse responses and remove the beging time reversed section
+* you should subtract this file by 1 or two samples so you do not cut off the begining of impulse responses.
+
+"""
+function peak_loc(imp)
+
+	l=imp.l_samples
+	samplerate=imp.samplerate
+	colmn=imp.channels
+	format=imp.format
+	samples=imp.samples
+	max_samp=maximum(imp.samples)
+	index=1
+	while !(samples[index]==max_samp)
+	
+		index=index+1
+	end
+	
+	return (index,Float64(index/samplerate))
+
+end
+
 
 end # module
