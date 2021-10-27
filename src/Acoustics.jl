@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -44,7 +44,118 @@ chan>0x0002&&return 0x04
 !(chan==0x0001)&(x=="")&&error("Unspecified Format")
 end
 
+function acoustic_loader(path::String,format::String="")
+	
+	if isdir(path)
+		loc=[]
+		for file in readdir(path)
+			if ('.'==file[1])||(isdir(joinpath(path,file)))
+	
+			else
+				
+				loc=vcat(loc,[joinpath(path,file)])
+			end
+		end
+		
+		l_loc=length(loc)
+		swpz=Vector{Acoustic}(undef,length(loc))
+	
+		for index in 1:l_loc
+			t_path=loc[index]
+			i=length(t_path)
+			p_end=length(t_path)
 
+			while !(t_path[i]=='.')
+				p_end=i
+				i-=1
+			end
+
+			p_end=p_end-2
+			i=length(path)
+
+			p_beg=1
+
+			if((t_path[1]=='/'))
+
+				while (!(t_path[i]=='/'))
+					p_beg=i
+					i-=1
+				end
+				temp=wavread(t_path)
+
+			else
+				path_h=pwd()
+				head_path=string(path_h,'/',t_path)
+				temp=wavread(head_path)
+			end
+
+			if ("wav"==t_path[(length(path)-2):end])||("WAV"==t_path[(length(t_path)-2):end])
+				samples=temp[1]
+				samplerate=temp[2]
+			else
+
+
+			end
+
+			sizez=size(samples)
+			l_samples=sizez[1]
+			chan=convert(UInt16,sizez[2])
+			format=format_parser(format,chan)
+			name=t_path[p_beg:p_end]
+	
+			swpz[i]=Acoustic(samples,samplerate,name,chan,format,l_samples)
+		end
+		
+		return swpz
+	
+	else
+		i=length(path)
+		p_end=length(path)
+
+		while !(path[i]=='.')
+			p_end=i
+			i-=1
+		end
+
+		p_end=p_end-2
+		i=length(path)
+
+		p_beg=1
+
+		if((path[1]=='/'))
+
+			while (!(path[i]=='/'))
+				p_beg=i
+				i-=1
+			end
+			temp=wavread(path)
+
+		else
+			path_h=pwd()
+			head_path=string(path_h,'/',path)
+			temp=wavread(head_path)
+		end
+
+		if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
+			samples=temp[1]
+			samplerate=temp[2]
+		else
+
+
+		end
+
+		sizez=size(samples)
+		l_samples=sizez[1]
+		chan=convert(UInt16,sizez[2])
+		format=format_parser(format,chan)
+		name=path[p_beg:p_end]
+
+		return Acoustic(samples,samplerate,name,chan,format,l_samples)
+	
+	
+	end
+
+end
 
 """
 # Acoustic Load
@@ -79,65 +190,34 @@ this is a unsigned integer
 
 """
 function acoustic_load(path::String,format::String="")
-
-	i=length(path)
-
-	p_end=length(path)
-
-	while !(path[i]=='.')
-
-		p_end=i
-
-		i-=1
-
-	end
-
-	p_end=p_end-2
-
-	i=length(path)
-
-
-	p_beg=1
-
-	if((path[1]=='/'))
-
-		while (!(path[i]=='/'))
-
-			p_beg=i
-
-			i-=1
-
+	
+	if isdir(path)
+		loc=[]
+		for file in readdir(path)
+			if ('.'==file[1])||(isdir(joinpath(path,file)))
+	
+			else
+				loc=vcat(loc,[joinpath(path,file)])
+			end
 		end
-		temp=wavread(path)
-
+		
+		l_loc=length(loc)
+		swpz=Vector{Acoustic}(undef,length(loc))
+	
+		for i in 1:l_loc
+			swpz[i]=acoustic_loader(loc[i],format)
+		end
+	
+		return swpz
+	
 	else
-
-		path_h=pwd()
-		head_path=string(path_h,'/',path)
-		temp=wavread(head_path)
-
-
+		return acoustic_loader(path,format)
+	
 	end
-
-
-	if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
-	samples=temp[1]
-	samplerate=temp[2]
-	else
-
-
-	end
-
-	sizez=size(samples)
-	l_samples=sizez[1]
-	chan=convert(UInt16,sizez[2])
-	format=format_parser(format,chan)
-	name=path[p_beg:p_end]
-
-	return Acoustic(samples,samplerate,name,chan,format,l_samples)
-
 
 end
+
+
 #=
 function general(source,weighting="z",band="b" ;s=1)
 
@@ -729,7 +809,7 @@ function EDT(source;weighting="z",bands::Int64=0,output="shell")
 end
 
 """
-# Ts- Centre Time
+# Ts - Centre Time
 `Ts(source,weighting,band=0,output="shell")`-> milliseconds (ms)
 
 * **Source** - the audio file loaded by acoustic_load
@@ -813,7 +893,7 @@ function Ts(source;weighting="z",bands::Int64=0,output="shell")
 end
 
 """
-# ST_early- Early Support
+# ST_early - Early Support
 `ST_early(source,weighting="z",bands=0,output="shell")`-> ratio (dB)
 
 * **Source** - the audio file loaded by acoustic_load
@@ -894,7 +974,7 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 end
 
 """
-# ST_late- Late Support
+# ST_late - Late Support
 `ST_early(source,weighting="z",bands=0)`-> ratio (dB)
 
 * **Source** - the audio file loaded by acoustic_load
@@ -975,7 +1055,7 @@ f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
 end
 
 """
-# IACC- Inter-Aural Cross Correlation Coefficients
+# IACC - Inter-Aural Cross Correlation Coefficients
 `IACC(source,weighting="z",bands=0 ;s=1)`-> time (ms)
 
 * **Source** - the audio file loaded by acoustic_load
@@ -1037,7 +1117,7 @@ function G(source,weighting="z",bands::Int64=0 ;s=1)
 
 end
 """
-# J_LF- Early Lateral Fraction
+# J_LF - Early Lateral Fraction
 `J_LF(source,weighting,band)`-> ratio
 
 * **Source** - the audio file loaded by acoustic_load
@@ -1076,7 +1156,7 @@ function J_LF(source;weighting="z",bands::Int64=0)
 end
 
 """
-# L_j- Late Lateral Fraction
+# L_j - Late Lateral Fraction
 `L_j(source,weighting,band)`-> ratio (dB)
 
 * **Source** - The audio file loaded by acoustic_load
@@ -1134,7 +1214,7 @@ end
 
 
 """
-# sweep- Logarithmic Sine Sweep
+# sweep - Logarithmic Sine Sweep
 `sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01;inv_norm="p")`-> sweep & inverse sweep in current working directory
 
 * **Duration** - The duration of the sine sweep in seconds
@@ -1276,7 +1356,7 @@ end
 
 
 """
-# sweep_target- adaptive Logarithmic Sine Sweep
+# sweep_target - adaptive Logarithmic Sine Sweep
 `sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003;inv_norm="p")`-> sweep & inverse sweep in current working directory
 
 * **Duration** - This is the targeted duration of the sine sweep in seconds
@@ -1301,7 +1381,7 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.001;inv_norm="p")
+function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.01;inv_norm="p")
 	#duration in seconds
 	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
 	r=f_1*((exp(-log(f_2/f_1))-1)/log(f_2/f_1))
@@ -1445,7 +1525,7 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp::Int=1,output="file")
+function  deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp::Int=1,output="file")
 
 	l=measured.l_samples
 	title=String(title)
@@ -1549,5 +1629,38 @@ function peak_loc(imp)
 
 end
 
+"""
+# seq_create - create multichannel sweep sequence
+`seq_create(source,channels::Int64)`-> sweep & inverse sweep in current working directory
+
+* **source** - this is a generated mono sweep loaded by acoustic_load
+* **channels** - this is the number of channels to sequence over
+
+### Explation
+This function will create a sweep played on each channel independently. This sequence of sweeps will allow easy capturing of channel crossfeed or what is better know as "true stereo" impuleses.   
+
+### Recomendations
+* make sure the silence following the generated sweep is longer than the expected as that is the only buffer between channels 
+* Set the level at playback this function will never adjust levels
+* When capturing sweep make sure you have atleast -6dB below peak as reverberation can add to the level.
+
+"""
+function seq_create(source,channels::Int64)
+	samplerate=source.samplerate
+	l=source.l_samples
+	name=source.name
+	source=source.samples
+	final=zeros(channels*l,channels)
+	
+	
+	for index=1:1:channels
+		first_i=(l*index)-l+1
+		last_i=index*l
+		final[first_i:last_i,index]=source
+	end
+	
+	wavwrite(final,name*"_"*string(channels)*"_sequence.wav",Fs=samplerate)
+
+end
 
 end # module
