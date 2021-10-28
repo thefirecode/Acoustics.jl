@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -1503,8 +1503,8 @@ end
 `deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp="h",output="file")`-> N-channel Wav file impulse
 
 * **Inverse** - This file should be monophonic inverse sweep file.
-* **Measured** - This should be the N channel capture sweep
-* **Title** - If you want to name the file something besides the name of the measured sweep with impulse appended
+* **Measured** - This should be the N channel captured sweep
+* **Title** - (optional) If you want to name the file something besides the name of the measured sweep with impulse appended
 * **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
 * **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
 * **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels.
@@ -1515,12 +1515,11 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 ### Recomendations
 * Audio must be loaded with acoustic_load
 * The first argument must be a mono file inverse sweep
-* The measured file must be identical number of samples per channel as inverse file
 * Ardour will make sample accurate edits
-* Audacity will not make sample accurate edits
+* Audacity will not make sample accurate edits try to make measure sweep slighly longer
 * Type pwd() to find the where impulses are saved
 * Do not use unnormalized as the signal will clip
-* Using other normalization you can do identity energy and identity peak amplitude 
+* Using other normalization you like peak amplitude will destroy the amplitude relationship between impulses. 
 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
@@ -1662,5 +1661,95 @@ function seq_create(source,channels::Int64)
 	wavwrite(final,name*"_"*string(channels)*"_sequence.wav",Fs=samplerate)
 
 end
+
+"""
+# Seq_Deconvolve - Generates a set of impulse responses from sine sweeps
+`seq_deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp="h",output="file")`-> N-channel Wav file impulse
+
+* **Inverse** - This file should be monophonic inverse sweep file.
+* **Measured** - This should be the N channel captured sweep seq
+* **Title** - If you want to name the file something besides the name of the measured sweep with impulse appended
+* **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
+* **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
+* **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels.
+* **lp** - 1 -full doubled sided impulse & lp>1- cuts from that sample to the end
+### Explation
+Deconvolve converts a measured sequence sweep into an impulse response using Logarithmic Sine Sweep Method.
+
+### Recomendations
+* Audio must be loaded with acoustic_load
+* The first argument must be a mono file inverse sweep
+* Ardour will make sample accurate edits
+* Audacity will not make sample accurate edits try to make measure sweep slighly longer
+* Type pwd() to find the where impulses are saved
+* Do not use unnormalized as the signal will clip
+* Using other normalization you like peak amplitude will destroy the amplitude relationship between impulses. Do not change normalization for a sequence.
+
+See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
+See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
+"""
+function seq_deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp::Int=1,output="file")
+	msamplerate=measured.samplerate
+	mchan=measured.channels
+
+	isamplerate=inverse.samplerate
+	ichan=inverse.channels
+	l=inverse.l_samples
+	
+	if (msamplerate==isamplerate)&&(mchan>ichan)
+		
+		if (output=="acoustic_load")&&(title=="")
+			impz=Vector{Acoustic}(undef,mchan)
+			for index=1:1:mchan
+				first_i=(l*index)-l+1
+				last_i=index*l
+		
+				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name)*"_chan_"*string(index)*".wav",mchan,measured.format,l)
+				impz[index]=deconvolve(inverse,temp,norm=norm,norm_o=norm_o,lp=lp,output="acoustic_load")
+			end
+			
+			return impz
+			
+		elseif (output=="acoustic_load")&&!(title=="")
+			impz=Vector{Acoustic}(undef,mchan)
+			for index=1:1:mchan
+				first_i=(l*index)-l+1
+				last_i=index*l
+		
+				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name),mchan,measured.format,l)
+				impz[index]=deconvolve(inverse,temp,title*"_chan_"*string(index)*".wav",norm=norm,norm_o=norm_o,lp=lp,output="acoustic_load")
+			end
+				
+			return impz
+			
+		end
+		#this is if it returns as a file
+		if (output=="file")&&(title=="")
+			for index=1:1:mchan
+				first_i=(l*index)-l+1
+				last_i=index*l
+		
+				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name)*"_chan_"*string(index)*".wav",mchan,measured.format,l)
+				deconvolve(inverse,temp,norm=norm,norm_o=norm_o,lp=lp,output="file")
+			end
+	
+		elseif (output=="file")&&!(title=="")
+			for index=1:1:mchan
+				first_i=(l*index)-l+1
+				last_i=index*l
+		
+				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name),mchan,measured.format,l)
+				deconvolve(inverse,temp,title=title*"_chan_"*string(index)*".wav",norm=norm,norm_o=norm_o,lp=lp,output="file")		
+			end
+		
+		end
+		
+	else
+		error("Samplerates do not match or the sweep does not have more channels than the inverse")
+	
+	end
+	
+end
+
 
 end # module
