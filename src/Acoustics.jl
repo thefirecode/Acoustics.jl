@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve,parseval_crop
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -20,7 +20,7 @@ using Reexport
 =#
 
 struct Acoustic
-	samples::Array{Float64}
+	samples::Array{<:AbstractFloat}
 	samplerate::Float32
 	name::String
 	channels::UInt16
@@ -49,6 +49,7 @@ function acoustic_loader(path::String,format::String="")
 	if isdir(path)
 		loc=[]
 		for file in readdir(path)
+			#remove hidden files
 			if ('.'==file[1])||(isdir(joinpath(path,file)))
 	
 			else
@@ -64,7 +65,8 @@ function acoustic_loader(path::String,format::String="")
 			t_path=loc[index]
 			i=length(t_path)
 			p_end=length(t_path)
-
+			
+			#Get the name Automted
 			while !(t_path[i]=='.')
 				p_end=i
 				i-=1
@@ -81,13 +83,32 @@ function acoustic_loader(path::String,format::String="")
 					p_beg=i
 					i-=1
 				end
-				temp=wavread(t_path)
+				
+
 
 			else
 				path_h=pwd()
 				head_path=string(path_h,'/',t_path)
 				temp=wavread(head_path)
 			end
+				temp=wavread(t_path,format="native")
+				if typeof(temp[1])==Matrix{Int32}
+					temp=wavread(t_path)
+					if ("wav"==t_path[(length(path)-2):end])||("WAV"==t_path[(length(t_path)-2):end])
+						samples=temp[1]
+						samplerate=temp[2]
+					else
+					end
+					
+				else
+					temp=wavread(t_path)
+					if ("wav"==t_path[(length(path)-2):end])||("WAV"==t_path[(length(t_path)-2):end])
+						samples=Float32.(temp[1])
+						samplerate=temp[2]
+					else
+					end
+				
+				end
 
 			if ("wav"==t_path[(length(path)-2):end])||("WAV"==t_path[(length(t_path)-2):end])
 				samples=temp[1]
@@ -128,21 +149,48 @@ function acoustic_loader(path::String,format::String="")
 				p_beg=i
 				i-=1
 			end
-			temp=wavread(path)
+			temp=wavread(path,format="native")
+			if typeof(temp[1])==Matrix{Int32}
+				temp=wavread(path)
+				if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
+					samples=temp[1]
+					samplerate=temp[2]
+				else
+				end
+					
+			else
+				temp=wavread(path)
+				if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
+					samples=Float32.(temp[1])
+					samplerate=temp[2]
+				else
+				end
+				
+			end
 
 		else
 			path_h=pwd()
 			head_path=string(path_h,'/',path)
-			temp=wavread(head_path)
+			temp=wavread(head_path,format="native")
+			if typeof(temp[1])==Matrix{Int32}
+				temp=wavread(head_path)
+				if ("wav"==head_path[(length(head_path)-2):end])||("WAV"==head_path[(length(head_path)-2):end])
+					samples=temp[1]
+					samplerate=temp[2]
+				else
+				end
+					
+			else
+				temp=wavread(head_path)
+				if ("wav"==head_path[(length(head_path)-2):end])||("WAV"==head_path[(length(head_path)-2):end])
+					samples=Float32.(temp[1])
+					samplerate=temp[2]
+				else
+				end
+				
+			end
 		end
-
-		if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
-			samples=temp[1]
-			samplerate=temp[2]
-		else
-
-
-		end
+		
 
 		sizez=size(samples)
 		l_samples=sizez[1]
@@ -1751,5 +1799,92 @@ function seq_deconvolve(inverse,measured;title::String="",norm::String="u",norm_
 	
 end
 
+function parseval_crop(imp;output="file",precision=7)
+	l=imp.l_samples
+	samplerate=imp.samplerate
+	colmn=imp.channels
+	format=imp.format
+	samples=imp.samples
+	chan=imp.channels
+	stop=10.0^(-precision)
+
+	#precalculates the first step & the crop vector for each all channels
+	crop=[]
+	step_int=1+(l-1)/2
+	step_int=floor(step_int)
+	step_i=Int(step_int)
+	max_samp=maximum(samples)
+	min_samp=minimum(samples)
+	normer=maximum([max_samp abs(min_samp)])
+	samp_normed=samples/normer
+	
+	for i in 1:chan
+		#Finds the total energy for the channel and precalculate squared amplitude
+		samp_sqr=abs2.(samp_normed[:,i])
+		tot_e=sum(samp_sqr)
+		tot_e=round(tot_e,digits=precision)
+		
+		n=2
+		step=step_i
+		samp_e=sum(samp_sqr[1:step])
+		max_l=l
+		#This is designed to take massive steps to find a crop point search range
+		while (step>1)&&(tot_e<=round(samp_e,digits=precision))
+			step=1+(max_l-1)/factorial(big(n))
+			step=floor(big(step))
+			step=Int(step)
+			samp_e=sum(samp_sqr[1:step])
+			n=n+1	
+		end
+		
+		step_lo=step
+		step_hi=1+(max_l-1)/factorial(big(n-2))
+		step_hi=floor(big(step_hi))
+		step_hi=Int(step_hi)
+		
+		samp_e=sum(samp_sqr[1:(step_hi-1)])
+		#checks if you have already found the value in the first iteration
+		if (tot_e-samp_e)>=stop
+			crop=vcat(crop,[step_hi])
+		else
+			#Now Trying to shrink crop search range
+			n=1
+			max_l=step_hi-1
+			step=max_l
+			
+			while (step>step_lo)&&(tot_e<=round(samp_e,digits=precision))
+				step=1+(max_l-1)/factorial(big(n))
+				step=floor(big(step))
+				step=Int(step)
+				samp_e=sum(samp_sqr[1:step])
+				n=n+1	
+			end
+			
+			step_lo=step
+			step_hi=1+(max_l-1)/factorial(big(n-2))
+			step_hi=floor(big(step_hi))
+			step_hi=Int(step_hi)
+			step=step_hi
+
+			
+			#brute force search for crop point
+			while (step>step_lo)&&!((tot_e-samp_e)>=stop)
+				samp_e=sum(samp_sqr[1:step])
+				step=step-1
+			end
+			crop=vcat(crop,[step+1])
+		
+		end
+	end
+	final_crop=maximum(crop)
+	cropped=samples[1:final_crop,:]
+	
+	if output=="file"
+		return wavwrite(cropped,imp.name*".wav",Fs=samplerate)
+	elseif output=="acoustic_load"
+		return Acoustic(cropped,samplerate,imp.name*".wav",colmn,format,l)
+	end
+
+end
 
 end # module
