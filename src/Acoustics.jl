@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve,parseval_crop
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve,parseval_crop,gain
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -1799,7 +1799,7 @@ function seq_deconvolve(inverse,measured;title::String="",norm::String="u",norm_
 	
 end
 
-function parseval_crop(imp;output="file",precision=7)
+function parseval_crop(imp;output="file",precision=7,cut_threshold=120)
 	l=imp.l_samples
 	samplerate=imp.samplerate
 	colmn=imp.channels
@@ -1813,14 +1813,11 @@ function parseval_crop(imp;output="file",precision=7)
 	step_int=1+(l-1)/2
 	step_int=floor(step_int)
 	step_i=Int(step_int)
-	max_samp=maximum(samples)
-	min_samp=minimum(samples)
-	normer=maximum([max_samp abs(min_samp)])
-	samp_normed=samples/normer
-	
+
 	for i in 1:chan
 		#Finds the total energy for the channel and precalculate squared amplitude
-		samp_sqr=abs2.(samp_normed[:,i])
+		samp_thres=threshold.(samples[:,i],cutoff=cut_threshold)
+		samp_sqr=abs2.(samp_thres)
 		tot_e=sum(samp_sqr)
 		tot_e=round(tot_e,digits=precision)
 		
@@ -1884,6 +1881,51 @@ function parseval_crop(imp;output="file",precision=7)
 	elseif output=="acoustic_load"
 		return Acoustic(cropped,samplerate,imp.name*".wav",colmn,format,l)
 	end
+
+end
+
+"""
+scale -"amp" is just linear amplitude and "dB" is decibel level
+
+"""
+function gain(source,factor=1.0;scale="amp",output="file")
+	l=source.l_samples
+	samplerate=source.samplerate
+	format=source.format
+	samples=source.samples
+	chan=source.channels
+	if scale=="amp"
+		g_samples=factor*samples
+	
+	elseif (scale=="db")||(scale=="dB")||(scale=="DB")
+		raw=db2amp(factor)
+		g_samples=raw*samples
+			
+	else
+	end
+
+
+
+	if output=="file"
+		return wavwrite(g_samples,source.name*".wav",Fs=samplerate)
+	elseif output=="acoustic_load"
+		return Acoustic(g_samples,samplerate,source.name*".wav",chan,format,l)
+	end
+
+end
+
+function threshold(x;cutoff=120.0)
+	tp=typeof(x)
+	thres=abs(cutoff)
+	thres=db2amp(-thres)
+
+	if abs(cutoff)>144.49439791871097
+		return x
+	elseif abs(x)<thres
+		return convert(tp,0)
+	else
+		return x
+	end	
 
 end
 
