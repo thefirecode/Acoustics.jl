@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve,parseval_crop,gain,true_stereo
+export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve,parseval_crop,gain,true_stereo,mono_collapse
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -1960,6 +1960,50 @@ function true_stereo(l,r)
 				pad=zeros(samp_t,diff,lef_chan)
 				lef_samp=vcat(lef_samp,pad)
 				t_stereo=hcat(lef_samp,righ_samp)
+				wavwrite(t_stereo,righ_name[1:(end-2)]*".wav",Fs=righ_samplerate)
+			end
+	
+		end
+	
+	else
+		println(righ_name," , ",lef_name)
+		error("Files incompatiable")
+		
+	end
+
+end
+
+function mono_collapse(l,r)
+	lef_samp=l.samples
+	lef_samplerate=l.samplerate
+	lef_chan=l.channels
+	lef_name=l.name
+	lef_length=l.l_samples
+	
+	righ_samp=r.samples
+	righ_samplerate=r.samplerate
+	righ_chan=r.channels
+	righ_name=r.name
+	righ_length=r.l_samples
+
+	#consistency check
+	if (righ_name[1:(end-2)]==lef_name[1:(end-2)])&&(righ_samplerate==lef_samplerate)&&(lef_chan==righ_chan)
+		if lef_length==righ_length
+			t_stereo=(+).(lef_samp,righ_samp)
+			wavwrite(t_stereo,righ_name[1:(end-2)]*".wav",Fs=righ_samplerate)
+		else
+			samp_t=typeof(righ_samp[1])
+			if lef_length>righ_length
+				diff=lef_length-righ_length
+				pad=zeros(samp_t,diff,lef_chan)
+				righ_samp=vcat(righ_samp,pad)
+				t_stereo=(+).(lef_samp,righ_samp)
+				wavwrite(t_stereo,righ_name[1:(end-2)]*".wav",Fs=righ_samplerate)
+			else
+				diff=righ_length-lef_length
+				pad=zeros(samp_t,diff,lef_chan)
+				lef_samp=vcat(lef_samp,pad)
+				t_stereo=(+).(lef_samp,righ_samp)
 				wavwrite(t_stereo,righ_name[1:(end-2)]*".wav",Fs=righ_samplerate)
 			end
 	
