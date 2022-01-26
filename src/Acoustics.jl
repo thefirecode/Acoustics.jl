@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport,DataFrames
 
-export Leq,C,RT,D,Ts,sweep,deconvolve,EDT,acoustic_load,ST_late,ST_early,IACC,G,sweep_target,peak_loc,seq_create,seq_deconvolve,parseval_crop,gain,Leqm
+export L,acoustic_load
 
 #this contian how to generate third octaves
 include("bands.jl");
@@ -10,6 +10,13 @@ include("bands.jl");
 using Reexport
 @reexport using .Bands
 
+#=
+Measurement – outputs non-audio values when given audios
+Generation – output a with no input
+Utility – inputs audio and outputs audio
+
+
+=#
 
 #=
 0x00-omni-"omni"
@@ -205,6 +212,44 @@ function acoustic_loader(path::String,format::String="")
 
 end
 
+struct Measure
+	name::String
+	measurement::String
+	format::UInt8
+	parameter::Dict
+	weighting::String
+	bands::UInt8
+	h_frequency::Float64
+	l_frequency::Float64
+	samplerate::Float32
+	channels::UInt16
+	results::DataFrame
+end
+
+#weighting function
+function frequency_weighting(x::Array{<:AbstractFloat,1},weight::String,Fs::Float32)
+
+	samples=x
+	if lowercase(weight)=="z"
+		return samples
+	elseif lowercase(weight)=="a"
+		w_fil=a_wtd(Fs)
+		samples=filt(w_fil,samples)
+		return samples
+	elseif lowercase(weight)=="c"
+		w_fil=c_wtd(Fs)
+		samples=filt(w_fil,samples)
+		return samples
+	elseif lowercase(weight)=="ccir"
+		w_fil=ccir(Fs)
+		samples=filt(w_fil,samples)
+		return samples
+	else
+		error("Unknown Weighting")
+	end
+
+end
+
 """
 # Acoustic Load
 
@@ -237,6 +282,7 @@ this is a string of the file name of imported file
 this is a unsigned integer
 
 """
+function acoustic_load end
 function acoustic_load(path::String,format::String="")
 
 	if isdir(path)
@@ -266,19 +312,21 @@ function acoustic_load(path::String,format::String="")
 end
 
 
-
 """
-# Leq - time-averaged sound level or equivalent continuous sound level
-`Leq(source,weighting,bands=0,ref=1,output="shell")`-> dB
+# L - time-averaged sound level or equivalent continuous sound level
+`L(source,channels,tweight,weighting,bands=0,ref=1,h_frequency,l_frequency)`-> dB
 
 * **Source** - the audio file loaded by acoustic_load
+* **Channels** - "all" or vector of channels to select
+* **Tweight** - selects the averaging time interval (eq, equivalent continuous & time-averaged)
 * **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
 * **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
 * **ref** - This is the reference level this will scale your recording to the proper level
-* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
+* **h_frequency** - This is the highest represented frequency
+* **l_frequency** - This is the lowest represented frequency
 
 ### Explation
-This is the average sound level over the whole file
+This is the average sound level over a specific interval over selected channels and included the overall average of these channels
 
 ### Recomendations
 * Use this to find the signal to noise ratio
@@ -286,243 +334,93 @@ This is the average sound level over the whole file
 
 See ANSI/ASA S1.1-2013 for more information
 """
-function Leq(source;weighting::String="z",bands::Int64=0,ref=1,output="shell")
-
-	samplerate=source.samplerate
-	l=source.l_samples
-	source=source.samples
-	#chan=source.channels
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-#f(x) is the defined function
-function f(x,n,p_0)
-
-sig=abs2.(x)
-power=sum(sig)
-powerdb=10*log10(power)
-norm=10*log10(n*p_0^2)
-
-	return powerdb-norm
-
+function Leq(p::Array{<:AbstractFloat},l::Int64,reference_level::AbstractFloat=1)
+	sig=abs2.(p)
+	sig=sum(sig)
+	sig=pow2db(sig)
+	scaler=abs2(l)*reference_level
+	scaler=pow2db(scaler)
+	output=sig-scaler
+	output=oftype(p[1],output)
+	return output
 end
 
-	if (bands==0)||(bands==0)
-
-		return f(source,l,ref)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source),l,ref),bands)
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-
-			writecsv2("Lt_"*source.name*".csv",vcat(["Frequency (Hz)" "L"*weighting*"eq(dB)"],hcat(center,results)))
-
-		else
-
-		end
-
-	end
-
-end
-
-"""
-# Leqm - time-averaged sound level or equivalent continuous sound level multi channel
-`Leq(source,weighting,bands=0,ref=1,output="shell",combination)`-> dB
-
-* **Source** - the audio file loaded by acoustic_load
-* **Weighting** - the frquency band weightings (Z,A,C,CCIR) [Default Z]
-* **Bands** - The number of integer octave band subdivisions aka 1/bands octave band. Where 0 is broadband. [Default 0]
-* **ref** - This is the reference level this will scale your recording to the proper level
-* **Output** - can be either "shell" which returns the results to the terminal or "file" which will put the results in a file.
-* **Combination** - when "individual" it returns a text file with the calculation for each channel and "averaged" is the average of all the channels
-
-
-### Explation
-This is the average sound level over the whole file
-
-### Recomendations
-* Use this to find the signal to noise ratio
-* Use this to find longterm noise level
-
-See ANSI/ASA S1.1-2013 for more information
-"""
-function Leqm end
-function Leqm(source;weighting::String="z",bands::Int=0,ref=1,output="shell",combination::String="individual")
-
-	if (weighting=="z")||(weighting=="Z")
-	elseif (weighting=="a")||(weighting=="A")
-	elseif (weighting=="c")||(weighting=="C")
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-	else
-		error("Weighting undefined")
-	end
-
-	samplerate=source.samplerate
-	l=source.l_samples
-	samples=source.samples
+#=
+implement weighting
+and return measure format
+=#
+function L end
+function L(source::Acoustic,channels::String,tweight::String,weighting::String,bands::Integer=1,ref::AbstractFloat=1.0,h_frequency::Real=20000.0,l_frequency::Real=20.0)
+	samps=source.samples
 	chan=source.channels
-
-	#f(x) is the defined function
-	function f(x,n,p_0)
-
-	sig=abs2.(x)
-	power=sum(sig)
-	powerdb=10*log10(power)
-	norm=10*log10(n*p_0^2)
-
-		return powerdb-norm
-
-	end
-
-	results=Dict()
-
-	for channels in 1:chan
-		if (weighting=="z")||(weighting=="Z")
-			filtered=samples[:,channels]
-		elseif (weighting=="a")||(weighting=="A")
-			ifil=a_wtd(samplerate)
-			filtered=filt(ifil,samples[:,channels])
-		elseif (weighting=="c")||(weighting=="C")
-			ifil=c_wtd(samplerate)
-			filtered=filt(ifil,samples[:,channels])
-		elseif (weighting=="ccir")||(weighting=="CCIR")
-			ifil=ccir(samplerate)
-			filtered=filt(ifil,samples[:,channels])
-		else
-			error("Weighting undefined")
-		end
-		value_name="Channel "*string(channels)
-		temp=f(filtered,l,ref)
-		merge!(results,Dict([(value_name,temp)]))
-
-	end
-	#temporary dataframe array
-	t_results=DataFrame(results)
-	if combination=="individual"
-		results=DataFrame()
-		results.Bands=["Broadband"]
-		results=t_results
-	elseif combination=="averaged"
-		indi=t_results[:,1]
-		for i in 2:chan
-				indi=hcat(indi,t_results[:,i])
-		end
-		indi=db2amp.(indi)
-		avg=mean(indi)
-		variance=var(indi)
-		results=DataFrame()
-		results.Bands=["Broadband"]
-		results."Averaged (dB)"=[amp2db(avg)]
-		results."Standard Deviation (dB)"=[powerdb(variance)]
-
-	else
-	end
-
-
-
-	return results
-end
-
-function Leqm(source;weighting::String="z",bands::Int=0,ref=1,output="shell",combination::String="individual")
-
-	if (weighting=="z")||(weighting=="Z")
-	elseif (weighting=="a")||(weighting=="A")
-	elseif (weighting=="c")||(weighting=="C")
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-	else
-		error("Weighting undefined")
-	end
-
+	samp_l=source.l_samples
 	samplerate=source.samplerate
-	l=source.l_samples
-	samples=source.samples
-	chan=source.channels
 
-	#f(x) is the defined function
-	function f(x,n,p_0)
-
-	sig=abs2.(x)
-	power=sum(sig)
-	powerdb=10*log10(power)
-	norm=10*log10(n*p_0^2)
-
-		return powerdb-norm
-
-	end
-
-	results=Dict()
-
-	for channels in 1:chan
-		if (weighting=="z")||(weighting=="Z")
-			filtered=samples[:,channels]
-		elseif (weighting=="a")||(weighting=="A")
-			ifil=a_wtd(samplerate)
-			filtered=filt(ifil,samples[:,channels])
-		elseif (weighting=="c")||(weighting=="C")
-			ifil=c_wtd(samplerate)
-			filtered=filt(ifil,samples[:,channels])
-		elseif (weighting=="ccir")||(weighting=="CCIR")
-			ifil=ccir(samplerate)
-			filtered=filt(ifil,samples[:,channels])
-		else
-			error("Weighting undefined")
-		end
-		value_name="Channel "*string(channels)
-		temp=f(filtered,l,ref)
-		merge!(results,Dict([(value_name,temp)]))
-
-	end
-	#temporary dataframe array
-	t_results=DataFrame(results)
-	if combination=="individual"
-		results=DataFrame()
-		results.Bands=["Broadband"]
-		results=t_results
-	elseif combination=="averaged"
-		indi=t_results[:,1]
-		for i in 2:chan
-				indi=hcat(indi,t_results[:,i])
-		end
-		indi=db2amp.(indi)
-		avg=mean(indi)
-		variance=var(indi)
-		results=DataFrame()
-		results.Bands=["Broadband"]
-		results."Averaged (dB)"=[amp2db(avg)]
-		results."Standard Deviation (dB)"=[powerdb(variance)]
-
+	if (h_frequency==20000.0)&&(l_frequency==20.0)
+		raw_gen=generateband(bands,samplerate)
+	elseif !(h_frequency==20000.0)
+		raw_gen=generateband(bands,samplerate,h_frequency)
 	else
+		raw_gen=generateband(bands,samplerate,h_frequency,l_frequency)
 	end
 
+	band_filters=raw_gen[1]
+	center_freq=raw_gen[2]
+	bands_num=length(center_freq)
+	output=Array{Float64, 2}(undef,bands_num,chan)
 
+	if lowercase(weighting)=="z"
+		if (lowercase(channels)=="all")
+			if (lowercase(tweight)=="eq")||(lowercase(tweight)=="continuous")
+				for i in 1:chan
+					samp_chan=samps[:,i]
+					band_index=1
+					for fil in band_filters
+						samp_filter=filt(fil,samp_chan)
+						output[band_index,i]=Leq(samp_filter,samp_l,ref)
+						band_index+=1
+					end
+				end
+			else
+			end
+		else
+			error("Unknown argument for channels")
+		end
 
-	return results
+		return output
+	else
+		if (lowercase(channels)=="all")
+			if (lowercase(tweight)=="eq")||(lowercase(tweight)=="continuous")
+				for i in 1:chan
+					samp_chan=samps[:,i]
+					samp_chan=frequency_weighting(samp_chan,weighting,samplerate)
+					band_index=1
+					for fil in band_filters
+						samp_filter=filt(fil,samp_chan)
+						output[band_index,i]=Leq(samp_filter,samp_l,ref)
+						band_index+=1
+					end
+				end
+			else
+			end
+		else
+			error("Unknown argument for channels")
+		end
+
+		return output
+	end
+
 end
+function L(source::Acoustic,channels::Vector{Int64},tweight::String,weighting::String,bands::Integer=1,ref::AbstractFloat=1) end
+function L(source::Acoustic,channels::String,tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
+function L(source::Acoustic,channels::Vector{Int64},tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
+
+#allows acoustics vector
+function L(source::Vector{Acoustic},channels::String,tweight::String,weighting::String,bands::Integer=0,ref::AbstractFloat=1) end
+function L(source::Vector{Acoustic},channels::Vector{Int64},tweight::String,weighting::String,bands::Integer=0,ref::AbstractFloat=1) end
+function L(source::Vector{Acoustic},channels::String,tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
+function L(source::Vector{Acoustic},channels::Vector{Int64},tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
+
 
 """
 # C - Clarity
@@ -545,65 +443,8 @@ C is known as Clarity it is the balance between early and late eneregy in an imp
 
 See ISO-3382 for more information
 """
-function C(source,time::Number;weighting::String="z",bands::Int64=0,output="shell")
+function C end
 
-	samplerate=source.samplerate
-	real_time=time
-	time=Int((time/1000.0)*source.samplerate)
-	name=source.name
-	source=source.samples
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-
-#f(x) is the defined function
-f(x)=10*log(10,sum(abs2.(x[1:time]))/sum(abs2.(x[time:end])))
-
-	if (bands==0)||(bands==0)
-
-		return f(source)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-			header=["Frequency (Hz)" "C"*string(real_time)*"(Weight="*weighting*") (dB)"]
-			file_output=vcat(header,string.(hcat(center,results)))
-
-			writecsv2("C"*string(real_time)*"_"*name*".csv",file_output)
-
-		else
-
-		end
-
-	end
-
-end
 """
 # D - Definition
 
@@ -626,64 +467,7 @@ D is known as Definition it is the balance between early and late eneregy in an 
 
 See ISO-3382 for more information
 """
-function D(source,time;weighting="z",bands::Int64=0,output="shell")
-
-	samplerate=source.samplerate
-	real_time=time
-	time=Int((time/1000.0)*source.samplerate)
-	name=source.name
-	source=source.samples
-
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-#f(x) is the defined function
-	f(x)=sum(abs2.(x[1:time]))/sum(abs2.(x[time:end]))
-
-	if (bands==0)||(bands==0)
-
-		return f(source)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-			header=["Frequency (Hz)" "D"*string(real_time)*"(Weight="*weighting*")"]
-			file_output=vcat(header,string.(hcat(center,results)))
-
-			writecsv2("D"*string(real_time)*"_"*name*".csv",file_output)
-
-		else
-
-		end
-
-	end
-
-end
+function D end
 
 """
 # RT - Reverberation Time
@@ -706,127 +490,7 @@ RT is known as Reverberation time it is the measure of decay from steady state t
 See ISO-3382 for more information
 
 """
-function RT(source,decay;weighting="z",bands::Int64=0,output="shell")
-
-	samplerate=source.samplerate
-	l=source.l_samples
-	sampl_amount=Int(ceil(samplerate/1000))
-	name=source.name
-	source=source.samples
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-
-	function f(x)
-		x=abs2.(x[:,1])
-
-		max=sum(x[:,1])
-
-		#takes only the first channel
-		x=reverse((/).(x[:,1],max))
-
-
-		target=[(10^(-5/10)),(10^(-((decay+5)/10)))]
-
-
-#hi and low refer to level
-		hi_range=1
-		lo_range=1
-		sampled_y=[1.0]
-		sampled_x=[0.0]
-		i=l-sampl_amount
-		total=2
-
-	if x[l]>target[2]
-
-		return Inf
-
-	else
-
-
-		while 0<i
-
-			sampled_y=vcat(sampled_y,sum(x[1:i]))
-
-			i-=sampl_amount
-		end
-
-			sampled_y=vcat(sampled_y,x[1])
-
-
-#the -5dB decay point
-
-		total=1
-		while (total>=target[1])&&(hi_range<l)
-			hi_range+=1
-			total=sampled_y[hi_range]
-
-		end
-#Starts the search at -5dB point
-		lo_range=hi_range
-
-		while (total>=target[2])&&(lo_range<l)
-			lo_range+=1
-			total=sampled_y[lo_range]
-		end
-
-	sequence=LinRange(0,length(sampled_y[hi_range:lo_range])*(sampl_amount/samplerate),length(sampled_y[hi_range:lo_range]))
-	std_x=std(sequence)
-	std_y=std(10*log.(10,sampled_y[hi_range:lo_range]))
-	r=cor(sequence,10*log.(10,sampled_y[hi_range:lo_range]))
-
-		m=r*(std_y/std_x)
-
-			return -60/m
-
-		end
-
-	end
-
-	if (bands==0)||(bands==0)
-
-		return f(source)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-			header=["Frequency (Hz)" "T"*string(decay)*" (Weight="*weighting*") (s)"]
-			file_output=vcat(header,string.(hcat(center,results)))
-
-			writecsv2("T"*string(decay)*"_"*name*".csv",file_output)
-
-		else
-
-		end
-
-	end
-
-end
+function RT end
 
 """
  EDT - Early Decay Time
@@ -847,127 +511,8 @@ EDT is known as Early Decay Time it is the measure of decay from peak to 10dB do
 See ISO-3382 for more information
 
 """
-function EDT(source;weighting="z",bands::Int64=0,output="shell")
+function EDT end
 
-	samplerate=source.samplerate
-	l=source.l_samples
-	sampl_amount=Int(ceil(samplerate/1000))
-	name=source.name
-	source=source.samples
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-
-	function f(x)
-		x=abs2.(x[:,1])
-
-		max=sum(x[:,1])
-
-		#takes only the first channel
-		x=reverse((/).(x[:,1],max))
-
-
-		target=[1,10^(-1)]
-
-
-#hi and low refer to level
-		hi_range=1
-		lo_range=1
-		sampled_y=[1.0]
-		sampled_x=[0.0]
-		i=l-sampl_amount
-		total=2
-
-	if x[l]>target[2]
-
-		return Inf
-
-	else
-
-
-		while 0<i
-
-			sampled_y=vcat(sampled_y,sum(x[1:i]))
-
-			i-=sampl_amount
-		end
-
-			sampled_y=vcat(sampled_y,x[1])
-
-
-#the -5dB decay point
-
-		total=1
-		while (total>=target[1])&&(hi_range<l)
-			hi_range+=1
-			total=sampled_y[hi_range]
-
-		end
-#Starts the search at -5dB point
-		lo_range=hi_range
-
-		while (total>=target[2])&&(lo_range<l)
-			lo_range+=1
-			total=sampled_y[lo_range]
-		end
-
-	sequence=LinRange(0,length(sampled_y[hi_range:lo_range])*(sampl_amount/samplerate),length(sampled_y[hi_range:lo_range]))
-	std_x=std(sequence)
-	std_y=std(10*log.(10,sampled_y[hi_range:lo_range]))
-	r=cor(sequence,10*log.(10,sampled_y[hi_range:lo_range]))
-
-		m=r*(std_y/std_x)
-
-			return -60/m
-
-		end
-
-	end
-
-	if (bands==0)||(bands==0)
-
-		return f(source)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-			header=["Frequency (Hz)" "Early Decay Time"*" (Weight="*weighting*") (s)"]
-			file_output=vcat(header,string.(hcat(center,results)))
-
-			writecsv2("EDT_"*name*".csv",file_output)
-
-		else
-
-		end
-
-	end
-
-end
 
 """
 # Ts - Centre Time
@@ -989,69 +534,7 @@ Ts is the time centre which is centre of gravity of the squared impulse repose. 
 
 See ISO-3382 for more information
 """
-function Ts(source;weighting="z",bands::Int64=0,output="shell")
-
-	samplerate=source.samplerate
-	l=source.l_samples
-	t=LinRange(0,l/samplerate,l)
-	name=source.name
-	source=source.samples
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-	function f(x)
-		x=abs2.(x)
-		top=(*).(x,t)
-
-		return (sum(top)/sum(x))*1000
-
-	end
-
-
-	if (bands==0)||(bands==0)
-
-		return f(source)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-			header=["Frequency (Hz)" "Time Centre "*" (Weight="*weighting*") (ms)"]
-			file_output=vcat(header,string.(hcat(center,results)))
-
-			writecsv2("Ts_"*name*".csv",file_output)
-
-		else
-
-		end
-
-	end
-
-end
+function Ts end
 
 """
 # ST_early - Early Support
@@ -1074,65 +557,7 @@ ST_early is the ratio of the reflectioned energy relative to the direct energy i
 
 See ISO-3382 for more information
 """
-function ST_early(source;weighting="z",bands::Int64=0,output="shell")
-
-	samplerate=source.samplerate
-	name=source.name
-	source=source.samples
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-time_1=Int(ceil(0.01*samplerate))
-time_2=Int(ceil(0.02*samplerate))
-time_3=Int(ceil(0.1*samplerate))
-
-#f(x) is the defined function
-f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
-
-	if (bands==0)||(bands==0)
-
-		return f(source)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-			header=["Frequency (Hz)" "Early Support (dB"*weighting*")"]
-			file_output=vcat(header,string.(hcat(center,results)))
-
-			writecsv2("ST_early_"*name*".csv",file_output)
-
-		else
-
-		end
-
-	end
-
-end
+function ST_early end
 
 """
 # ST_late - Late Support
@@ -1155,65 +580,7 @@ ST_early is the ratio of the reflectioned energy relative to the direct energy i
 
 See ISO-3382 for more information
 """
-function ST_late(source;weighting="z",bands::Int64=0,output="shell")
-
-	samplerate=source.samplerate
-	name=source.name
-	source=source.samples
-
-	if (weighting=="z")||(weighting=="Z")
-
-	elseif (weighting=="a")||(weighting=="A")
-		ifil=a_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="c")||(weighting=="C")
-		ifil=c_wtd(samplerate)
-		source=filt(ifil,source)
-	elseif (weighting=="ccir")||(weighting=="CCIR")
-		ifil=ccir(samplerate)
-		source=filt(ifil,source)
-	else
-		return print("Weighting undefined")
-
-	end
-
-
-time_1=Int(ceil(0.01*samplerate))
-time_2=Int(ceil(0.1*samplerate))
-time_3=Int(ceil(samplerate))
-
-#f(x) is the defined function
-f(x)=10*log(10,sum(abs2.(x[1:time_1]))/sum(abs2.(x[time_2:time_3])))
-
-	if (bands==0)||(bands==0)
-
-		return f(source)
-
-	else (bands>0)
-
-	gen_bands=generateband(bands,samplerate)
-	bands=gen_bands[1]
-	center=gen_bands[2]
-
-	results=pmap(x->f(filt(digitalfilter(x,Butterworth(3)),source)),bands)
-
-		if output=="shell"
-
-			return hcat(center,results)
-
-		elseif output=="file"
-			header=["Frequency (Hz)" "Late Support (dB"*weighting*")"]
-			file_output=vcat(header,string.(hcat(center,results)))
-
-			writecsv2("ST_late_"*name*".csv",file_output)
-
-		else
-
-		end
-
-	end
-
-end
+function ST_late end
 
 """
 # IACC - Inter-Aural Cross Correlation Coefficients
@@ -1235,48 +602,11 @@ IACC is the point of maximum cross correlation between the left and right ears.
 
 See ISO-3382 for more information
 """
-function IACC(source;weighting="z",bands::Int64=0)
-
-	samplerate=source.samplerate
-	name=source.name
-	source=source.samples
-	left=source[:,1]
-	right=source[:,2]
-
-	#x-left and y-right
-	function f(x,y)
-		x=fft(x)
-		y=fft(y)
-		top=(*).(x,conj.(y))
-		bottom=sqrt(sum((^).(x,2))*sum((^).(y,2)))
-
-		return maximum(real.((/).(top,bottom)))
-	end
-
-	return f(left,right)
-end
+function IACC end
 
 
-function G(source,weighting="z",bands::Int64=0 ;s=1)
+function G end
 
-	samplerate=source.samplerate
-	l=source.l_samples
-	source=source.samples
-	l=source[:,1]
-	l_10=source[:,2]
-
-	#x is direct and y is 10m
-
-	function f(x,y)
-		x=sum(abs2.(x))
-		y=sum(abs2.(y))
-
-		return log10(x/y)
-	end
-
-	return f(l,l_10)
-
-end
 """
 # J_LF - Early Lateral Fraction
 `J_LF(source,weighting,band)`-> ratio
@@ -1294,27 +624,8 @@ J_LF is the ratio between a figure-8 microphone microphone null pointed at the s
 
 See ISO-3382 for more information
 """
-function J_LF(source;weighting="z",bands::Int64=0)
+function J_LF end
 
-	samplerate=source.samplerate
-	name=source.name
-	source=source.samples
-	l_o=source[:,1]
-	l_8=source[:,2]
-	time_1=Int(ceil(samplerate*0.005))
-	time_2=Int(ceil(samplerate*0.08))
-
-#x is the omni & y is the figure 8
-	function f(x,y)
-		x=sum(abs2.(x[1:time_2]))
-		y=sum(abs2.(y[time_1:time_2]))
-
-		return (y/x)
-	end
-
-	return f(l_o,l_g)
-
-end
 
 """
 # L_j - Late Lateral Fraction
@@ -1333,46 +644,7 @@ L_j is the ratio between a figure-8 microphone microphone null pointed at the so
 
 See ISO-3382 for more information
 """
-function L_j(source;weighting="z",bands::Int64=0)
-
-	samplerate=source.samplerate
-	name=source.name
-	source=source.samples
-	l_o=source[:,1]
-	l_8=source[:,2]
-	time_1=Int(ceil(samplerate*0.08))
-
-#x is the omni & y is the figure 8
-	function f(x,y)
-		x=sum(abs2.(x))
-		y=sum(abs2.(y[time_1:end]))
-
-		return (y/x)
-	end
-
-	return f(l_o,l_g)
-
-end
-
-function swup(time,duration,f_1,f_2)
-#time seconds
-#duraction seconds
-#f_1<f_2
-	K=(duration*2*f_1)/log((f_2)/(f_1))
-	L=duration/log((f_2)/(f_1))
-	return sinpi(K*(exp(time/L)-1))
-end
-
-#inverse generation
-function iswup(time,duration,f_1,f_2)
-#time seconds
-#duraction seconds
-#f_1<f_2
-	L=duration/log((f_2)/(f_1))
-	m=exp(-(time)/L)
-	return m
-end
-
+function L_j end
 
 """
 # sweep - Logarithmic Sine Sweep
@@ -1401,120 +673,7 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01;inv_norm="p")
-	#duration in seconds
-	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
-	sequence=range(0.0,duration,length=Int(floor(samplerate*duration)))
-	window=tukey(Int(floor(samplerate*duration)),α)
-	sweep=(*).(swup.(sequence,duration,f_1,f_2),window)
-	isweep=(*).(swup.(sequence[end:-1:1],duration,f_1,f_2),iswup.(sequence,duration,f_1,f_2),window)
-	silence=zeros(Int(floor(samplerate*silence_duration)))
-	sweep=vcat(sweep,silence)
-	isweep=vcat(silence,isweep)
-
-	#Amplitude Normalization
-	sweep_length=length(sweep)
-	padding_length=nextfastfft(2*sweep_length)-sweep_length
-	padding=zeros(padding_length)
-	sweep_fft=vcat(sweep,padding)
-	isweep_fft=vcat(isweep,padding)
-	sweep_fft=fft(sweep_fft)
-	isweep_fft=fft(isweep_fft)
-	conv=(*).(sweep_fft,isweep_fft)
-	length_conv=padding_length+sweep_length
-	bin=LinRange(0,(length_conv-1),length_conv)
-	norm_bin=(/).(bin,length_conv)
-	freq_bin=(*).(samplerate,norm_bin)
-	low_index=0
-	hi_index=0
-
-	if inv_norm=="p"
-		for n in 1:1:Int(floor(0.5*length_conv)+1)
-
-			if freq_bin[n]==f_1
-				low_index=n
-			else
-				if 1<n
-					if freq_bin[n-1]<f_1<freq_bin[n+1]
-						low_index=n
-					end
-				end
-
-			end
-
-			if f_2==(samplerate*0.5)
-				hi_index=Int(floor(0.5*length_conv)+1)
-			else
-				if freq_bin[n]==f_2
-					hi_index=n
-				else
-					if 1<n
-						if freq_bin[n-1]<f_2<freq_bin[n+1]
-							hi_index=n
-						end
-					end
-				end
-			end
-
-		end
-
-		mag_conv=abs.(conv[low_index:hi_index])
-		mag_conv=maximum(mag_conv)
-		avg_amp=mag_conv
-		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Peak Passband Amplitude: ",avg_amp)
-		isweep=(/).(isweep,avg_amp)
-	elseif inv_norm=="a"
-		for n in 1:1:Int(floor(0.5*length_conv)+1)
-
-			if freq_bin[n]==f_1
-				low_index=n
-			else
-				if 1<n
-					if freq_bin[n-1]<f_1<freq_bin[n+1]
-						low_index=n
-					end
-				end
-
-			end
-
-			if f_2==(samplerate*0.5)
-				hi_index=Int(floor(0.5*length_conv)+1)
-			else
-				if freq_bin[n]==f_2
-					hi_index=n
-				else
-					if 1<n
-						if freq_bin[n-1]<f_2<freq_bin[n+1]
-							hi_index=n
-						end
-					end
-				end
-			end
-
-		end
-
-		mag_conv=abs.(conv[low_index:hi_index])
-		mag_conv=sum(mag_conv)
-		avg_amp=mag_conv/(bin[hi_index]-bin[low_index])
-		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Average Passband Amplitude: ",avg_amp)
-		isweep=(/).(isweep,avg_amp)
-	elseif inv_norm=="e"
-		energy=abs2.(conv)
-		energy=sum(energy)/(2*pi)
-		isweep=(/).(isweep,energy)
-		println("Total Energy: ",energy)
-
-	else
-		println("Unnormalized")
-
-	end
-
-	#work on the output
-	wavwrite(sweep,"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
-	wavwrite(isweep,"Inverse_"*"Sweep-Duration_"*values[1]*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
-end
-
-
+function sweep end
 
 """
 # sweep_target - adaptive Logarithmic Sine Sweep
@@ -1542,122 +701,7 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.01;inv_norm="p")
-	#duration in seconds
-	values=string.([duration,silence_duration,f_1,f_2,α,samplerate])
-	r=f_1*((exp(-log(f_2/f_1))-1)/log(f_2/f_1))
-	n_target=ceil(r*duration)
-	duration_target=n_target/r
-	sequence=LinRange(0.0,duration_target,Int(floor(samplerate*duration_target)))
-	window=tukey(Int(floor(samplerate*duration_target)),α)
-	sweep=(*).(swup.(sequence,duration_target,f_1,f_2),window)
-	isweep=(*).(swup.(sequence[end:-1:1],duration_target,f_1,f_2),iswup.(sequence,duration_target,f_1,f_2),window)
-	silence=zeros(Int(floor(samplerate*silence_duration)))
-
-	#Amplitude Normalization
-	sweep_length=length(sweep)
-	padding_length=nextfastfft(2*sweep_length)-sweep_length
-	padding=zeros(padding_length)
-	sweep_fft=vcat(sweep,padding)
-	isweep_fft=vcat(isweep,padding)
-	sweep_fft=fft(sweep_fft)
-	isweep_fft=fft(isweep_fft)
-	conv=(*).(sweep_fft,isweep_fft)
-	length_conv=padding_length+sweep_length
-	bin=LinRange(0,(length_conv-1),length_conv)
-	norm_bin=(/).(bin,length_conv)
-	freq_bin=(*).(samplerate,norm_bin)
-	low_index=0
-	hi_index=0
-
-	if inv_norm=="p"
-		for n in 1:1:Int(floor(0.5*length_conv)+1)
-
-			if freq_bin[n]==f_1
-				low_index=n
-			else
-				if 1<n
-					if freq_bin[n-1]<f_1<freq_bin[n+1]
-						low_index=n
-					end
-				end
-
-			end
-
-			if f_2==(samplerate*0.5)
-				hi_index=Int(floor(0.5*length_conv)+1)
-			else
-				if freq_bin[n]==f_2
-					hi_index=n
-				else
-					if 1<n
-						if freq_bin[n-1]<f_2<freq_bin[n+1]
-							hi_index=n
-						end
-					end
-				end
-			end
-
-		end
-
-		mag_conv=abs.(conv[low_index:hi_index])
-		mag_conv=maximum(mag_conv)
-		avg_amp=mag_conv
-		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Peak Passband Amplitude: ",avg_amp)
-		isweep=(/).(isweep,avg_amp)
-	elseif inv_norm=="a"
-		for n in 1:1:Int(floor(0.5*length_conv)+1)
-
-			if freq_bin[n]==f_1
-				low_index=n
-			else
-				if 1<n
-					if freq_bin[n-1]<f_1<freq_bin[n+1]
-						low_index=n
-					end
-				end
-
-			end
-
-			if f_2==(samplerate*0.5)
-				hi_index=Int(floor(0.5*length_conv)+1)
-			else
-				if freq_bin[n]==f_2
-					hi_index=n
-				else
-					if 1<n
-						if freq_bin[n-1]<f_2<freq_bin[n+1]
-							hi_index=n
-						end
-					end
-				end
-			end
-
-		end
-
-		mag_conv=abs.(conv[low_index:hi_index])
-		mag_conv=sum(mag_conv)
-		avg_amp=mag_conv/(bin[hi_index]-bin[low_index])
-		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Average Passband Amplitude: ",avg_amp)
-		isweep=(/).(isweep,avg_amp)
-	elseif inv_norm=="e"
-		energy=abs2.(conv)
-		energy=sum(energy)/(2*pi)
-		isweep=(/).(isweep,energy)
-		println("Total Energy: ",energy)
-
-	else
-		println("Unnormalized")
-
-	end
-
-	sweep=vcat(sweep,silence)
-	isweep=vcat(silence,isweep)
-	wavwrite(sweep,"Sweep-Duration_"*string(duration_target)*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
-	wavwrite(isweep,"Inverse_"*"Sweep-Duration_"*string(duration_target)*"_Silence_"*values[2]*"_Low-Frequency_"*values[3]*"_High-Frequency_"*values[4]*"_Alpha_"*values[5]*"_Fs_"*values[6]*".wav",Fs=samplerate)
-end
-
-
+function sweep_target end
 
 """
 # Deconvolve - Generates impulse responses from sine sweeps
@@ -1685,77 +729,7 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function  deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp::Int=1,output="file")
-
-	l=measured.l_samples
-	title=String(title)
-	samplerate=measured.samplerate
-	colmn=measured.channels
-	format=measured.format
-
-	if length(title)==0
-
-		title=measured.name
-	else
-		title=title
-
-	end
-
-
-	if (((measured.l_samples-inverse.l_samples)/measured.l_samples)<-0.01)
-
-		error("The Measure sweep has a sample length difference greater than 1%. Try re-editing your measured sweep")
-
-	else measured.l_samples==inverse.l_samples
-
-	#find the next small product
-	padnum=nextprod([2,3,5,7,11,13,17],2*l)-l
-
-	inver_zeros=zeros(typeof(inverse.samples[1]),(nextprod([2,3,5,7,11,13,17],2*l)-inverse.l_samples),1)
-	inver_pad=vcat(inverse.samples,inver_zeros)
-	inverse=rfft(inver_pad)
-
-	mea_zeros=zeros(typeof(measured.samples[1]),padnum,colmn)
-	mea_pad=vcat(measured.samples,mea_zeros)
-	measured=rfft(mea_pad)
-	imp=(*).(measured,inverse)
-	rimp=irfft(imp,padnum+l)
-
-	if lp>0
-
-		rimp=rimp[lp:end,:]
-	else
-		error("you input a negative value it cannot not be cut from here")
-	end
-
-
-	if norm=="l"
-	#normalized by number of samples
-	normalizer=l
-	rimp=(/).(rimp,normalizer)
-	elseif norm=="n"
-	#Peak amplitude normalized
-	normalizer=maximum(abs.(rimp))
-	rimp=(/).(rimp,normalizer)
-	elseif norm=="u"
-	#unnormalized
-	else norm=="o"
-	#other
-	normalizer=norm_o
-	rimp=(/).(rimp,normalizer)
-
-	end
-
-
-	if output=="file"
-		return wavwrite(rimp,title*"-impulse.wav",Fs=samplerate)
-	elseif output=="acoustic_load"
-		return Acoustic(rimp,samplerate,title*"-impulse.wav",colmn,format,l)
-	end
-
-	end
-
-end
+function  deconvolve end
 
 """
 # Peak_loc - gets index of maximum sample value
@@ -1771,23 +745,7 @@ Find the index of the maximum samples level.
 * you should subtract this file by 1 or two samples so you do not cut off the begining of impulse responses.
 
 """
-function peak_loc(imp)
-
-	l=imp.l_samples
-	samplerate=imp.samplerate
-	colmn=imp.channels
-	format=imp.format
-	samples=imp.samples
-	max_samp=maximum(imp.samples)
-	index=1
-	while !(samples[index]==max_samp)
-
-		index=index+1
-	end
-
-	return (index,Float64(index/samplerate))
-
-end
+function peak_loc end
 
 """
 # seq_create - create multichannel sweep sequence
@@ -1805,23 +763,7 @@ This function will create a sweep played on each channel independently. This seq
 * When capturing sweep make sure you have atleast -6dB below peak as reverberation can add to the level.
 
 """
-function seq_create(source,channels::Int64)
-	samplerate=source.samplerate
-	l=source.l_samples
-	name=source.name
-	source=source.samples
-	final=zeros(channels*l,channels)
-
-
-	for index=1:1:channels
-		first_i=(l*index)-l+1
-		last_i=index*l
-		final[first_i:last_i,index]=source
-	end
-
-	wavwrite(final,name*"_"*string(channels)*"_sequence.wav",Fs=samplerate)
-
-end
+function seq_create end
 
 """
 # Seq_Deconvolve - Generates a set of impulse responses from sine sweeps
@@ -1849,197 +791,16 @@ Deconvolve converts a measured sequence sweep into an impulse response using Log
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-function seq_deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp::Int=1,output="file")
-	msamplerate=measured.samplerate
-	mchan=measured.channels
+function seq_deconvolve end
 
-	isamplerate=inverse.samplerate
-	ichan=inverse.channels
-	l=inverse.l_samples
+function parseval_crop end
 
-	if (msamplerate==isamplerate)&&(mchan>ichan)
-
-		if (output=="acoustic_load")&&(title=="")
-			impz=Vector{Acoustic}(undef,mchan)
-			for index=1:1:mchan
-				first_i=(l*index)-l+1
-				last_i=index*l
-
-				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name)*"_chan_"*string(index)*".wav",mchan,measured.format,l)
-				impz[index]=deconvolve(inverse,temp,norm=norm,norm_o=norm_o,lp=lp,output="acoustic_load")
-			end
-
-			return impz
-
-		elseif (output=="acoustic_load")&&!(title=="")
-			impz=Vector{Acoustic}(undef,mchan)
-			for index=1:1:mchan
-				first_i=(l*index)-l+1
-				last_i=index*l
-
-				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name),mchan,measured.format,l)
-				impz[index]=deconvolve(inverse,temp,title*"_chan_"*string(index)*".wav",norm=norm,norm_o=norm_o,lp=lp,output="acoustic_load")
-			end
-
-			return impz
-
-		end
-		#this is if it returns as a file
-		if (output=="file")&&(title=="")
-			for index=1:1:mchan
-				first_i=(l*index)-l+1
-				last_i=index*l
-
-				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name)*"_chan_"*string(index)*".wav",mchan,measured.format,l)
-				deconvolve(inverse,temp,norm=norm,norm_o=norm_o,lp=lp,output="file")
-			end
-
-		elseif (output=="file")&&!(title=="")
-			for index=1:1:mchan
-				first_i=(l*index)-l+1
-				last_i=index*l
-
-				temp=Acoustic(measured.samples[first_i:last_i,:],measured.samplerate,(measured.name),mchan,measured.format,l)
-				deconvolve(inverse,temp,title=title*"_chan_"*string(index)*".wav",norm=norm,norm_o=norm_o,lp=lp,output="file")
-			end
-
-		end
-
-	else
-		error("Samplerates do not match or the sweep does not have more channels than the inverse")
-
-	end
-
-end
-
-function parseval_crop(imp;output="file",precision=7,cut_threshold=120)
-	l=imp.l_samples
-	samplerate=imp.samplerate
-	colmn=imp.channels
-	format=imp.format
-	samples=imp.samples
-	chan=imp.channels
-	stop=10.0^(-precision)
-
-	#precalculates the first step & the crop vector for each all channels
-	crop=[]
-	step_int=1+(l-1)/2
-	step_int=floor(step_int)
-	step_i=Int(step_int)
-
-	for i in 1:chan
-		#Finds the total energy for the channel and precalculate squared amplitude
-		samp_thres=threshold.(samples[:,i],cutoff=cut_threshold)
-		samp_sqr=abs2.(samp_thres)
-		tot_e=sum(samp_sqr)
-		tot_e=round(tot_e,digits=precision)
-
-		n=2
-		step=step_i
-		samp_e=sum(samp_sqr[1:step])
-		max_l=l
-		#This is designed to take massive steps to find a crop point search range
-		while (step>1)&&(tot_e<=round(samp_e,digits=precision))
-			step=1+(max_l-1)/factorial(big(n))
-			step=floor(big(step))
-			step=Int(step)
-			samp_e=sum(samp_sqr[1:step])
-			n=n+1
-		end
-
-		step_lo=step
-		step_hi=1+(max_l-1)/factorial(big(n-2))
-		step_hi=floor(big(step_hi))
-		step_hi=Int(step_hi)
-
-		samp_e=sum(samp_sqr[1:(step_hi-1)])
-		#checks if you have already found the value in the first iteration
-		if (tot_e-samp_e)>=stop
-			crop=vcat(crop,[step_hi])
-		else
-			#Now Trying to shrink crop search range
-			n=1
-			max_l=step_hi-1
-			step=max_l
-
-			while (step>step_lo)&&(tot_e<=round(samp_e,digits=precision))
-				step=1+(max_l-1)/factorial(big(n))
-				step=floor(big(step))
-				step=Int(step)
-				samp_e=sum(samp_sqr[1:step])
-				n=n+1
-			end
-
-			step_lo=step
-			step_hi=1+(max_l-1)/factorial(big(n-2))
-			step_hi=floor(big(step_hi))
-			step_hi=Int(step_hi)
-			step=step_hi
-
-
-			#brute force search for crop point
-			while (step>step_lo)&&!((tot_e-samp_e)>=stop)
-				samp_e=sum(samp_sqr[1:step])
-				step=step-1
-			end
-			crop=vcat(crop,[step+1])
-
-		end
-	end
-	final_crop=maximum(crop)
-	cropped=samples[1:final_crop,:]
-
-	if output=="file"
-		return wavwrite(cropped,imp.name*".wav",Fs=samplerate)
-	elseif output=="acoustic_load"
-		return Acoustic(cropped,samplerate,imp.name*".wav",colmn,format,l)
-	end
-
-end
 
 """
 scale -"amp" is just linear amplitude and "dB" is decibel level
 
 """
-function gain(source,factor=1.0;scale="amp",output="file")
-	l=source.l_samples
-	samplerate=source.samplerate
-	format=source.format
-	samples=source.samples
-	chan=source.channels
-	if scale=="amp"
-		g_samples=factor*samples
+function gain end
 
-	elseif (scale=="db")||(scale=="dB")||(scale=="DB")
-		raw=db2amp(factor)
-		g_samples=raw*samples
-
-	else
-	end
-
-
-
-	if output=="file"
-		return wavwrite(g_samples,source.name*".wav",Fs=samplerate)
-	elseif output=="acoustic_load"
-		return Acoustic(g_samples,samplerate,source.name*".wav",chan,format,l)
-	end
-
-end
-
-function threshold(x;cutoff=120.0)
-	tp=typeof(x)
-	thres=abs(cutoff)
-	thres=db2amp(-thres)
-
-	if abs(cutoff)>144.49439791871097
-		return x
-	elseif abs(x)<thres
-		return convert(tp,0)
-	else
-		return x
-	end
-
-end
 
 end # module
