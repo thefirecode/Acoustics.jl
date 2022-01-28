@@ -10,7 +10,7 @@ const attenuation_2=[-0.6 0.6;-0.6 0.7;-0.6 0.9;-0.4 1.7;15.6 Inf;39.5 Inf;54 In
 const octave_band=[1,G^(1/8),G^(1/4),G^(3/8),G,G^2,G^3,G^4];
 
 function center(x::Int64,b::Int64)
-    if iseven(b)==true
+    if iseven(b)
         return f_r*(G^((2*x+1)/(2*b)))
     else
         return f_r*(G^(x/b))
@@ -18,19 +18,15 @@ function center(x::Int64,b::Int64)
 end
 
 function lower(x::Int64,b::Int64)
-    if iseven(b)==true
-        return (f_r*(G^((2*x-2)/(2*b))))
-    else
-        return f_r*(G^((x-0.5)/b))
-    end
+    temp=center(x,b)
+	scaled=temp*G^(-1/(2*b))
+	return scaled
 end
 
 function upper(x::Int64,b::Int64)
-    if iseven(b)==true
-        return (f_r*(G^((2*x+2)/(2*b))))
-    else
-        return f_r*(G^((x+0.5)/b))
-    end
+	temp=center(x,b)
+	scaled=temp*G^(1/(2*b))
+	return scaled
 end
 
 function edge(b::Int64,h_frequency::Real=20000.0,l_frequency::Real=20.0)
@@ -66,7 +62,7 @@ if h_frequency>=1000
 end
 
 function acceptance_adjuster(x::Float64,b::Int64)
-	if b>1
+	if (b>1)
 		ratio=(G^(1/(2*b))-1)/(G^(1/2)-1)
 		scaled=ratio*(x-1.0)
 		scaled=1+scaled
@@ -112,7 +108,7 @@ function generateband(bands::Int64,samplerate::Real,h_frequency::Real=20000.0,l_
 		band_fil=Bandpass.(low_bw,upp_bw,fs=samplerate)
 		nyquist_fil=Highpass(lower(edgez[end],bands),fs=samplerate)
 		all_fil=vcat(band_fil,nyquist_fil)
-		all_fil=map(x->digitalfilter(x,Butterworth(6)),all_fil)
+		all_fil=map(x->digitalfilter(x,Elliptic(20,0.4,70)),all_fil)
 
 	else
 		low_bw=lower.(edgez,bands)
@@ -121,7 +117,7 @@ function generateband(bands::Int64,samplerate::Real,h_frequency::Real=20000.0,l_
 		#now filter build filter
 		band_fil=Bandpass.(low_bw,upp_bw,fs=samplerate)
 		all_fil=band_fil
-		all_fil=map(x->digitalfilter(x,Butterworth(6)),all_fil)
+		all_fil=map(x->digitalfilter(x,Elliptic(20,0.4,70)),all_fil)
 
 	end
 
@@ -148,7 +144,7 @@ function generateband_verify(bands::Int64,samplerate::Real,h_frequency::Real=200
 		band_fil=Bandpass.(low_bw,upp_bw,fs=samplerate)
 		nyquist_fil=Highpass(lower(edgez[end],bands),fs=samplerate)
 		all_fil=vcat(band_fil,nyquist_fil)
-		all_fil=map(x->digitalfilter(x,Butterworth(6)),all_fil)
+		all_fil=map(x->digitalfilter(x,Elliptic(4,0.4,70)),all_fil)
 
 	else
 		low_bw=lower.(edgez,bands)
@@ -157,9 +153,9 @@ function generateband_verify(bands::Int64,samplerate::Real,h_frequency::Real=200
 		#now filter build filter
 		band_fil=Bandpass.(low_bw,upp_bw,fs=samplerate)
 		all_fil=band_fil
-		all_fil=map(x->digitalfilter(x,Butterworth(6)),all_fil)
-
+		all_fil=map(x->digitalfilter(x,Elliptic(4,0.4,70)),all_fil)
 	end
+
 
 	return (all_fil,centerz)
 
@@ -173,7 +169,6 @@ function filter_verify(bands::Int64,samplerate::Real,class::Int64=1,h_frequency:
 	scaled_limit=acceptance_adjuster.(octave_band,bands)
 	normalize_freq=vcat((/).(1,scaled_limit[end:-1:2]),scaled_limit)
 
-	vcat((/).(1,octave_band[end:-1:2]),octave_band)
 
 	if class==1
 		att_top=vcat(attenuation_1[end:-1:2,1],attenuation_1[:,1])
@@ -203,10 +198,12 @@ function filter_verify(bands::Int64,samplerate::Real,class::Int64=1,h_frequency:
 			level=freqresp(test_filter,test_frequency[tfreq])
 			level=abs(level)
 			#the negative sign is because this is attenuation not gain anymore
-			att_level=-amp2db(level)
+			att_level=amp2db(level)
+			att_level=round(att_level,digits=1)
+			att_level=-att_level
 			att_check=(att[tfreq,2]>=att_level)&&(att_level>=att[tfreq,1])
 			if !att_check
-				println(att[tfreq,2]," >= ",att_level," >= ",att[tfreq,1]," , ",verification_val," Center (Hz): ",center," Verfication (Hz): ",test_frequency[tfreq]*((2*π)\samplerate))
+				println(att[tfreq,2]," >= ",att_level," >= ",att[tfreq,1],", Center (Hz): ",center," Verfication (Hz): ",test_frequency[tfreq]*((2*π)\samplerate))
 			else
 			end
 			temp_var=temp_var+att_check
@@ -215,10 +212,11 @@ function filter_verify(bands::Int64,samplerate::Real,class::Int64=1,h_frequency:
 		verification_val=verification_val+(temp_var/tf_num)
 
 	end
-	println("Correct (%) : ",100*(verification_val/bandnum))
+
 	if verification_val==Float64(bandnum)
 			return true
 	else
+			println("Correct (%) : ",100*(verification_val/bandnum))
 			return false
 	end
 

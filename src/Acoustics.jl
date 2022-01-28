@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport,DataFrames
 
-export L,acoustic_load
+export L,acoustic_load,filter_verify
 
 #this contian how to generate third octaves
 include("bands.jl");
