@@ -1,9 +1,9 @@
 module Acoustics
 
-using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport,DataFrames
+using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport,DataFrames,DataStructures
 
-export L,acoustic_load,filter_verify
-
+export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target
+export WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_ALAW, WAVE_FORMAT_MULAW #exporting WAVE constants
 #this contian how to generate third octaves
 include("bands.jl");
 
@@ -35,6 +35,21 @@ struct Acoustic
 	l_samples::Int64
 end
 
+struct Measure
+	name::String
+	measurement::String
+	format::UInt8
+	parameter::Dict
+	weighting::String
+	bands::UInt8
+	h_frequency::Float64
+	l_frequency::Float64
+	samplerate::Float32
+	channels::UInt16
+	results::DataFrame
+end
+
+
 function format_parser(x::String,chan::UInt16=0x0001)
 (x=="m")&&return 0x04
 chan>0x0002&&return 0x04
@@ -51,180 +66,7 @@ chan>0x0002&&return 0x04
 !(chan==0x0001)&(x=="")&&error("Unspecified Format")
 end
 
-function acoustic_loader(path::String,format::String="")
 
-	if isdir(path)
-		loc=[]
-		for file in readdir(path)
-			#remove hidden files
-			if ('.'==file[1])||(isdir(joinpath(path,file)))
-
-			else
-
-				loc=vcat(loc,[joinpath(path,file)])
-			end
-		end
-
-		l_loc=length(loc)
-		swpz=Vector{Acoustic}(undef,length(loc))
-
-		for index in 1:l_loc
-			t_path=loc[index]
-			i=length(t_path)
-			p_end=length(t_path)
-
-			#Get the name Automted
-			while !(t_path[i]=='.')
-				p_end=i
-				i-=1
-			end
-
-			p_end=p_end-2
-			i=length(path)
-
-			p_beg=1
-
-			if((t_path[1]=='/'))
-
-				while (!(t_path[i]=='/'))
-					p_beg=i
-					i-=1
-				end
-
-
-
-			else
-				path_h=pwd()
-				head_path=string(path_h,'/',t_path)
-				temp=wavread(head_path)
-			end
-				temp=wavread(t_path,format="native")
-				if typeof(temp[1])==Matrix{Int32}
-					temp=wavread(t_path)
-					if ("wav"==t_path[(length(path)-2):end])||("WAV"==t_path[(length(t_path)-2):end])
-						samples=temp[1]
-						samplerate=temp[2]
-					else
-					end
-
-				else
-					temp=wavread(t_path)
-					if ("wav"==t_path[(length(path)-2):end])||("WAV"==t_path[(length(t_path)-2):end])
-						samples=Float32.(temp[1])
-						samplerate=temp[2]
-					else
-					end
-
-				end
-
-			if ("wav"==t_path[(length(path)-2):end])||("WAV"==t_path[(length(t_path)-2):end])
-				samples=temp[1]
-				samplerate=temp[2]
-			else
-
-
-			end
-
-			sizez=size(samples)
-			l_samples=sizez[1]
-			chan=convert(UInt16,sizez[2])
-			format=format_parser(format,chan)
-			name=t_path[p_beg:p_end]
-
-			swpz[i]=Acoustic(samples,samplerate,name,chan,format,l_samples)
-		end
-
-		return swpz
-
-	else
-		i=length(path)
-		p_end=length(path)
-
-		while !(path[i]=='.')
-			p_end=i
-			i-=1
-		end
-
-		p_end=p_end-2
-		i=length(path)
-
-		p_beg=1
-
-		if((path[1]=='/'))
-
-			while (!(path[i]=='/'))
-				p_beg=i
-				i-=1
-			end
-			temp=wavread(path,format="native")
-			if typeof(temp[1])==Matrix{Int32}
-				temp=wavread(path)
-				if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
-					samples=temp[1]
-					samplerate=temp[2]
-				else
-				end
-
-			else
-				temp=wavread(path)
-				if ("wav"==path[(length(path)-2):end])||("WAV"==path[(length(path)-2):end])
-					samples=Float32.(temp[1])
-					samplerate=temp[2]
-				else
-				end
-
-			end
-
-		else
-			path_h=pwd()
-			head_path=string(path_h,'/',path)
-			temp=wavread(head_path,format="native")
-			if typeof(temp[1])==Matrix{Int32}
-				temp=wavread(head_path)
-				if ("wav"==head_path[(length(head_path)-2):end])||("WAV"==head_path[(length(head_path)-2):end])
-					samples=temp[1]
-					samplerate=temp[2]
-				else
-				end
-
-			else
-				temp=wavread(head_path)
-				if ("wav"==head_path[(length(head_path)-2):end])||("WAV"==head_path[(length(head_path)-2):end])
-					samples=Float32.(temp[1])
-					samplerate=temp[2]
-				else
-				end
-
-			end
-		end
-
-
-		sizez=size(samples)
-		l_samples=sizez[1]
-		chan=convert(UInt16,sizez[2])
-		format=format_parser(format,chan)
-		name=path[p_beg:p_end]
-
-		return Acoustic(samples,samplerate,name,chan,format,l_samples)
-
-
-	end
-
-end
-
-struct Measure
-	name::String
-	measurement::String
-	format::UInt8
-	parameter::Dict
-	weighting::String
-	bands::UInt8
-	h_frequency::Float64
-	l_frequency::Float64
-	samplerate::Float32
-	channels::UInt16
-	results::DataFrame
-end
 
 #weighting function
 function frequency_weighting(x::Array{<:AbstractFloat,1},weight::String,Fs::Float32)
@@ -253,16 +95,16 @@ end
 """
 # Acoustic Load
 
-acoustic_load(path,format) - Loads file for processing by other functions in Acoustics.jl
+`acoustic_load(path,format)` -> Loads file(s) in a collection for processing
 
-**path** - The location of the supported audio file. Must either be a fullpath or relative to the current working directory. to find the current working directory type pwd(). Look into julia shell for more information
-**format** - This used to flag the channel order in a multichannel input for certian functions.
+* **path** - The location of the supported audio file. Must either be a fullpath or relative to the current working directory. to find the current working directory type pwd(). Look into julia shell for more information
+* **format** - This used to flag the channel order in a multichannel input for certian functions.
 
 ## Example
 
 `julia>` a=acoustic_load("Center Hi Sweep-5 impulse_short.wav")
 
-The wav file has been loaded into the variable a
+The wav file(s) has been loaded into the variable a as a linked list. Call collect(a) to convert it to a vector this is not needed most of the time
 
 `julia>` a.samples
 
@@ -271,7 +113,6 @@ this is an array of individual samples from the loaded files
 `julia>` a.samplerate
 
 this is a float contianing the samplerate
-
 
 `julia>` a.name
 
@@ -284,33 +125,144 @@ this is a unsigned integer
 """
 function acoustic_load end
 function acoustic_load(path::String,format::String="")
-
 	if isdir(path)
-		loc=[]
+		loc=MutableLinkedList{String}()
 		for file in readdir(path)
-			if ('.'==file[1])||(isdir(joinpath(path,file)))
-
+			#remove hidden files
+			fullp=joinpath(path,file) # See stores the full path of index to reduce recalculation
+			if ('.'==file[1])||(isdir(fullp))
+				#left blank as we do not want hidden files and directories to be added to the list of files
 			else
-				loc=vcat(loc,[joinpath(path,file)])
+				fext=splitext(file)[2] #gets the file extension
+				fext=fext=lowercase(fext)
+				#=
+				Adds only wave files to the array location
+				=#
+				if (".wav"==fext)
+					push!(loc,fullp)
+				end
 			end
 		end
-
-		l_loc=length(loc)
-		swpz=Vector{Acoustic}(undef,length(loc))
-
-		for i in 1:l_loc
-			swpz[i]=acoustic_loader(loc[i],format)
+		
+		#=
+		It either says no WAVE files are found or it creates an empty linked list to store the 
+		=#
+		if length(loc)==0
+			error("Directory contians no WAVE files")
+		else
+			sigz=MutableLinkedList{Acoustic}()
+				#do the creation of the acoustic load list
+			for file in loc
+				name=splitext(basename(file))[1] #get the file name without extension
+				temp=wavread(file,format="native")
+				samplerate=temp[2] #converts samplerate to proper format
+				
+				#Deterimine if it will gain anything from being stored as a 64bit float if not will save meory space
+				if typeof(temp[1])==Matrix{Int32}
+					samples=temp[1]
+				else
+					samples=Float32.(temp[1])
+				end
+				#=
+				Handles the inputing of acoustic load data
+				=#
+				sizez=size(samples)
+				l_samples=sizez[1]
+				chan=convert(UInt16,sizez[2])
+				fformat=format_parser(format,chan) #this needs to be fformat (files format) so it can reuse the format the user input
+				push!(sigz,Acoustic(samples,samplerate,name,chan,fformat,l_samples))
+			end
+			
+			return sigz
 		end
-
-		return swpz
-
+	
 	else
-		return acoustic_loader(path,format)
-
+		#this is the case of a single file
+		file=basename(path) #gets the file name including extension
+		if ('.'==file[1])
+			error("Is hidden file")
+		else
+			fext=splitext(file)[2] #gets the file extension
+			fext=lowercase(fext) #makes the extension all lowercase
+			if (".wav"==fext)
+				sigz=MutableLinkedList{Acoustic}() #created an empty linked list
+				name=splitext(file)[1] #get the file name without extension
+				temp=wavread(path,format="native")
+				samplerate=temp[2] #converts samplerate to proper format
+				
+				#Deterimine if it will gain anything from being stored as a 64bit float if not will save meory space
+				if typeof(temp[1])==Matrix{Int32}
+					samples=temp[1]
+				else
+					samples=Float32.(temp[1])
+				end
+				
+				sizez=size(samples)
+				l_samples=sizez[1]
+				chan=convert(UInt16,sizez[2])
+				format=format_parser(format,chan)
+				push!(sigz,Acoustic(samples,samplerate,name,chan,format,l_samples))
+				return sigz
+			else
+				error("Not a supported file")
+			end
+		
+		end
+		
+		
+	
 	end
+	
+	
 
 end
 
+
+"""
+# Acoustic Save
+
+`acoustic_save(signal,path="";bits=0,sformat=0)` - exports acoustics collection to audio files
+
+* **signal** - an Acoustic collection
+* **path** - the file path to save the files. it defaults to the current workinf directory
+* **bits** - specifies the number of bits to be used to encode each sample; the default (0) is an automatic choice based on the values of sform.
+* **sformat** - controls the type of encoding used in the file. The options are `WAVE_FORMAT_PCM`, `WAVE_FORMAT_IEEE_FLOAT` ,`WAVE_FORMAT_ALAW` ,` WAVE_FORMAT_MULAW`
+
+
+## Example
+
+`julia>` a=acoustic_write(a)
+
+### Recomendations
+This is merely a pretty warper for wavwrite for the WAV library. You will want to process them if your saving them to something besides float as toyu will get an inexact error.
+
+"""
+function acoustic_save end
+function acoustic_save(signal,path="";bits=0,sformat=0)
+
+	#if a path is not specified it uses the current working directory
+	
+	if (typeof(signal)==DataStructures.MutableLinkedList{Acoustics.Acoustic})||(typeof(signal)==Vector{Acoustics.Acoustic})
+		
+		if path==""
+			path=pwd()
+		else
+			
+		end
+		
+		for file in signal
+			
+			fullp=joinpath(path,file.name*".wav")
+			println("Saving : "*fullp)
+			wavwrite(file.samples,fullp,Fs=file.samplerate, nbits=bits, compression=sformat)
+		end
+		
+	else
+		error("Unsupported datatype")
+	end
+
+
+end
 
 """
 # L - time-averaged sound level or equivalent continuous sound level
@@ -646,54 +598,81 @@ See ISO-3382 for more information
 """
 function L_j end
 
+
+function swup(time,K,L)
+
+	return sinpi(K*(exp(time/L)-1))
+end
+
+#inverse generation
+function iswup(time,L)
+	m=exp(-(time)/L)
+	return m
+end
+
+
+
 """
 # sweep - Logarithmic Sine Sweep
-`sweep(duration,silence_duration,f_1,f_2,samplerate,α=0.01;inv_norm="p")`-> sweep & inverse sweep in current working directory
+`sweep(duration,f_1,f_2,samplerate)`-> sweep & inverse sweep in an acoustic load
 
 * **Duration** - The duration of the sine sweep in seconds
-* **Silence Duration** - the duration of the silence following the sweep
 * **F_1** - The start frequency (Hz) of the sweep
 * **F_2** - The end frequency (Hz) of the sweep
 * **Samplerate** - The samplerate (Hz) of the sine sweep
-* **α** -  The mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
-* **inv_norm** - This is the normalization gain applied to the inverse sweep. The default value of "p" will normalize to the peak passband amplitude. "a" will normalize to the average passband amplitude. "e" will normalize to the total energy. All other values will cause the signal to be unnormalized.
 
 ### Explation
-The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard.
+The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. This merely generates the sweep and the inverse it useful for 
 
 ### Recomendations
-* The default value for α will provide a perfectly pop free experience but, cause a loss of high frequencies above 94.9125% of f_2
-* Use this to capture multiple channel impulse values.
 * type pwd() to find the current working directory
 * Avoid going all the way up to the nyquist frequency aliasing can occur due the change in frequency
-* Leave the inverse sweep normalization at either "p" or "a" the unnormalized sweep applies a pretty large gain in the passband and which will cause impulses to clip.
-* If measuring the absolute energy is important then use "e" other wise it cause your signal to be extremely quiet for no benefit.
 
 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
 function sweep end
+function sweep(duration,f_1,f_2,samplerate)
+	K=(duration*2*f_1)/log((f_2)/(f_1))
+	L=duration/log((f_2)/(f_1))
+	sigz=MutableLinkedList{Acoustic}()
+	values=string.([duration,f_1,f_2,samplerate])
+	n_samp=Int(floor(samplerate*duration))
+	sequence=range(0.0,duration,length=n_samp)
+	sweep=swup.(sequence,K,L)
+	isweep=(*).(sweep[end:-1:1],iswup.(sequence,L))
+	sname="Sweep-Duration_"*values[1]*"_f1_"*values[2]*"_f2_"*values[3]*"_Fs_"*values[4]
+	isname="Inverse-Sweep-Duration_"*values[1]*"_f1_"*values[2]*"_f2_"*values[3]*"_Fs_"*values[4]
+	swpl=Acoustic(sweep,Float32(samplerate),sname,UInt16(1),0x00,n_samp)
+	iswpl=Acoustic(isweep,Float32(samplerate),isname,UInt16(1),0x00,n_samp)
+	push!(sigz,swpl,iswpl)
+	return sigz
 
-"""
+end
+"""  
 # sweep_target - adaptive Logarithmic Sine Sweep
-`sweep_target(duration,silence_duration,f_1,f_2,samplerate,α=0.0003;inv_norm="p")`-> sweep & inverse sweep in current working directory
+
+
+`sweep_target(duration,t60e,predelay,ichan,f_L,f_H,sformat::DataType,samplerate,α=0.0003;inv_norm="p")`-> sweep & inverse sweep
 
 * **Duration** - This is the targeted duration of the sine sweep in seconds
-* **Silence Duration** - The duration of the silence following the sweep
-* **F_1** - The start frequency (Hz) of the sweep
-* **F_2** - The end frequency (Hz) of the sweep
+* **t60e** - a best guess of what the maximum reverberation time in seconds
+* **predelay** - the maximum travel time in seconds between transmission and reception of the sweep.
+* **ichan** - The number of input channels on playback speakers or hardware devices. If you have two playback sources then ichan=2. If capturing a stereo device ichan=2.
+* **f_L** - The lowest frequency (Hz) you want to measure in the flat output region 
+* **f_H** - The highest frequency you want to measure in the flat output region
+* **pbits** - what is the significant bit depth(CD would be 15,24bit audio is 23 and floating point audio would be 24 as that is the size of the mantissa of the floating point number)
 * **Samplerate** - The samplerate (Hz) of the sine sweep
 * **α** -  The mix between a boxcar window and a Hann Window. An α=0 is a boxcar and an α=1 is a Hann window. This parameter controls the tukey window.
 * **inv_norm** - This is the normalization gain applied to the inverse sweep. The default value of "p" will normalize to the peak passband amplitude. "a" will normalize to the average passband amplitude. "e" will normalize to the total energy. All other values will cause the signal to be unnormalized.
 
 ### Explation
-The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard. This function differs from sweep in that it tries to find an optimal duration that will cause the sweep function to end on zero. Allowing smaller α values which will reduce high frequency loss in the impulse. This function will always generate a duration smaller than the input duration.
+The Logarithmic Sine Sweep is method for generating impulse responses. The longer the sweep more ambient noise suppresion. If alpha is zero a click will be heard. This function differs from sweep in that it tries to find an optimal sweep frequencies edges. Sweep Target also finds the optimal silence duration to stop
 
 ### Recomendations
-* The default value for α will provide a perfectly pop free experience but, cause a loss of high frequencies above 99.825% of f_2
 * type pwd() to find the current working directory
-* Avoid going all the way up to the nyquist frequency aliasing can occur due the change in frequency
+* Avoid going all the way up to the nyquist frequency aliasing can occur
 * Leave the inverse sweep normalization at either "p" or "a" the unnormalized sweep applies a pretty large gain in the passband and which will cause impulses to clip.
 * If measuring the absolute energy is important then use "e" other wise it cause your signal to be extremely quiet for no benefit.
 
@@ -701,7 +680,173 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
+
 function sweep_target end
+
+function sweep_target(duration,t60e,predelay,ichan,f_L,f_H,pbits::Int,samplerate,α=0.0003;inv_norm="p")
+	values=string.([duration,t60e,predelay,ichan,f_L,f_H,pbits,α])
+	#calculate the optimal values for the sweep
+	edgedom=2*α-2
+	N_lh=log(f_L*f_H)*α
+	N_L=log(f_L)*2
+	N_H=log(f_H)*2
+	N_2=(N_lh-N_H)/edgedom
+	
+	
+	if N_2>log(samplerate)
+		error("Try a smaller α parameter or reduce high frequency parameter. Current Setting will cause aliasing f_2 : ",exp(N_2))
+	end
+	
+	N_1=(N_lh-N_L)/edgedom
+		
+	f_1=exp(N_1)
+	f_2=exp(N_2)
+	f2div1=N_2-N_1 #f2div1=log((f_2)/(f_1))
+	#found the optimal
+	K=(duration*2*f_1)/f2div1 
+	L=duration/f2div1
+		
+	#calculate optimum sweep length and get it to a 10th of a second
+	optil=predelay
+	optil=optil+log(10,cbrt(2.0^pbits))*t60e
+	optil=ceil(optil,digits=1)
+		
+	#now calculation silence
+	silence_duration=optil-duration
+	silence=zeros(Int(floor(samplerate*silence_duration)))
+	
+	#calculate things need for sweep
+	sequence=range(0.0,duration,length=Int(floor(samplerate*duration))) #generating the time seteps
+	window=tukey(Int(floor(samplerate*duration)),α) #calculates the window
+	sweep=(*).(swup.(sequence,K,L),window)
+	isweep=(*).(sweep[end:-1:1],iswup.(sequence,L),window)
+	sweep=vcat(sweep,silence)
+	isweep=vcat(isweep,silence)
+	
+		
+	#Amplitude Normalization
+	sweep_length=length(sweep)
+	padding_length=nextfastfft(2*sweep_length)-sweep_length
+	padding=zeros(padding_length)
+	sweep_fft=vcat(sweep,padding)
+	isweep_fft=vcat(isweep,padding)
+	sweep_fft=fft(sweep_fft)
+	isweep_fft=fft(isweep_fft)
+	conv=(*).(sweep_fft,isweep_fft)
+	length_conv=padding_length+sweep_length
+	bin=LinRange(0,(length_conv-1),length_conv)
+	norm_bin=(/).(bin,length_conv)
+	freq_bin=(*).(samplerate,norm_bin)
+	low_index=0
+	hi_index=0
+
+	if inv_norm=="p"
+		for n in 1:1:Int(floor(0.5*length_conv)+1)
+	
+			if freq_bin[n]==f_1
+				low_index=n
+			else 
+				if 1<n
+					if freq_bin[n-1]<f_1<freq_bin[n+1]
+						low_index=n
+					end
+				end
+		
+			end
+		
+			if f_2==(samplerate*0.5)
+				hi_index=Int(floor(0.5*length_conv)+1)
+			else
+				if freq_bin[n]==f_2
+					hi_index=n
+				else
+					if 1<n	
+						if freq_bin[n-1]<f_2<freq_bin[n+1]
+							hi_index=n
+						end
+					end
+				end
+			end
+
+		end
+
+		mag_conv=abs.(conv[low_index:hi_index])
+		mag_conv=maximum(mag_conv)
+		avg_amp=mag_conv
+		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Peak Passband Amplitude: ",avg_amp)
+		isweep=(/).(isweep,avg_amp)
+	elseif inv_norm=="a"
+		for n in 1:1:Int(floor(0.5*length_conv)+1)
+	
+			if freq_bin[n]==f_1
+				low_index=n
+			else 
+				if 1<n
+					if freq_bin[n-1]<f_1<freq_bin[n+1]
+						low_index=n
+					end
+				end
+		
+			end
+		
+			if f_2==(samplerate*0.5)
+				hi_index=Int(floor(0.5*length_conv)+1)
+			else
+				if freq_bin[n]==f_2
+					hi_index=n
+				else
+					if 1<n	
+						if freq_bin[n-1]<f_2<freq_bin[n+1]
+							hi_index=n
+						end
+					end
+				end
+			end
+
+		end
+
+		mag_conv=abs.(conv[low_index:hi_index])
+		mag_conv=sum(mag_conv)
+		avg_amp=mag_conv/(bin[hi_index]-bin[low_index])
+		println("Low End: ",freq_bin[low_index],", High End: ",freq_bin[hi_index]," Average Passband Amplitude: ",avg_amp)
+		isweep=(/).(isweep,avg_amp)
+	elseif inv_norm=="e"
+		energy=abs2.(conv)
+		energy=sum(energy)/(2*pi)
+		isweep=(/).(isweep,energy)
+		println("Total Energy: ",energy)
+		
+	else
+		println("Unnormalized")
+	
+	end
+	
+	#prep the arrays for output
+	sigz=MutableLinkedList{Acoustic}()
+	values=string.([duration,t60e,predelay,ichan,f_L,f_H,pbits,α])
+	values=string.([duration,f_L,f_H,t60e,pbits,α])
+	sname="Sweep-time_"*values[1]*"_fl_"*values[2]*"_fH_"*values[3]*"_RTe_"*values[4]*"_bit_"*values[5]*"_α_"*values[6]
+	isname="Inverse-Sweep-time_"*values[1]*"_fl_"*values[2]*"_fH_"*values[3]*"_RTe_"*values[4]*"_bit_"*values[5]*"_α_"*values[6]
+	
+	if ichan>1
+		pad=zeros((ichan-1)*sweep_length)
+		swp=vcat(sweep,pad)
+		temp=swp
+		for dex in 1:(ichan-1)
+			temp=hcat(temp,shiftsignal(swp,sweep_length*dex))
+		end
+		swpl=Acoustic(temp,Float32(samplerate),sname,UInt16(ichan),0x04,sweep_length*ichan)
+	else
+		swpl=Acoustic(sweep,Float32(samplerate),sname,UInt16(1),0x04,sweep_length)
+	end
+	
+	iswpl=Acoustic(isweep,Float32(samplerate),isname,UInt16(1),0x00,sweep_length)
+
+	push!(sigz,swpl,iswpl)	
+
+	return sigz
+end
+
 
 """
 # Deconvolve - Generates impulse responses from sine sweeps
@@ -747,23 +892,6 @@ Find the index of the maximum samples level.
 """
 function peak_loc end
 
-"""
-# seq_create - create multichannel sweep sequence
-`seq_create(source,channels::Int64)`-> sweep & inverse sweep in current working directory
-
-* **source** - this is a generated mono sweep loaded by acoustic_load
-* **channels** - this is the number of channels to sequence over
-
-### Explation
-This function will create a sweep played on each channel independently. This sequence of sweeps will allow easy capturing of channel crossfeed or what is better know as "true stereo" impuleses.
-
-### Recomendations
-* make sure the silence following the generated sweep is longer than the expected as that is the only buffer between channels
-* Set the level at playback this function will never adjust levels
-* When capturing sweep make sure you have atleast -6dB below peak as reverberation can add to the level.
-
-"""
-function seq_create end
 
 """
 # Seq_Deconvolve - Generates a set of impulse responses from sine sweeps
