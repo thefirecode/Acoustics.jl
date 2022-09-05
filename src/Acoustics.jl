@@ -680,9 +680,7 @@ The Logarithmic Sine Sweep is method for generating impulse responses. The longe
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
-
 function sweep_target end
-
 function sweep_target(duration,t60e,predelay,ichan,f_L,f_H,pbits::Int,samplerate,α=0.0003;inv_norm="p")
 	values=string.([duration,t60e,predelay,ichan,f_L,f_H,pbits,α])
 	#calculate the optimal values for the sweep
@@ -706,14 +704,11 @@ function sweep_target(duration,t60e,predelay,ichan,f_L,f_H,pbits::Int,samplerate
 	K=(duration*2*f_1)/f2div1 
 	L=duration/f2div1
 		
-	#calculate optimum sweep length and get it to a 10th of a second
+	#calculate optimum silence length and get it to a 10th of a second
 	optil=predelay
 	optil=optil+log(10,cbrt(2.0^pbits))*t60e
 	optil=ceil(optil,digits=1)
-		
-	#now calculation silence
-	silence_duration=optil-duration
-	silence=zeros(Int(floor(samplerate*silence_duration)))
+	silence=zeros(Int(floor(samplerate*optil)))
 	
 	#calculate things need for sweep
 	sequence=range(0.0,duration,length=Int(floor(samplerate*duration))) #generating the time seteps
