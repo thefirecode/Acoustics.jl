@@ -1,9 +1,12 @@
 module Acoustics
 
-using DSP,WAV,ReadWriteDlm2,FFTW,Statistics,Distributed,Reexport,DataFrames,DataStructures
+using DSP,WAV,ReadWriteDlm2,Statistics,Distributed,Reexport,DataFrames,DataStructures,FFTW
 
-export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target
+export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve
 export WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_ALAW, WAVE_FORMAT_MULAW #exporting WAVE constants
+#export FFTW.MEASURE,FFTW.DESTROY_INPUT,FFTW.UNALIGNED,FFTW.CONSERVE_MEMORY,FFTW.EXHAUSTIVE,FFTW.PRESERVE_INPUT,FFTW.PATIENT,FFTW.ESTIMATE,FFTW.WISDOM_ONLY,FFTW.NO_SIMD #FFTW flags
+import FFTW:MEASURE,DESTROY_INPUT,UNALIGNED,CONSERVE_MEMORY,EXHAUSTIVE,PRESERVE_INPUT,PATIENT,ESTIMATE,WISDOM_ONLY,NO_SIMD
+export MEASURE,DESTROY_INPUT,UNALIGNED,CONSERVE_MEMORY,EXHAUSTIVE,PRESERVE_INPUT,PATIENT,ESTIMATE,WISDOM_ONLY,NO_SIMD
 #this contian how to generate third octaves
 include("bands.jl");
 
@@ -870,6 +873,95 @@ See "Simultaneous measurement of impulse response and distortion with a swept-si
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
 """
 function  deconvolve end
+function  deconvolve(inv,swp,ichannel::Int;fft_flag::UInt32=ESTIMATE,tlimit=Inf,inverse::Bool=false,inverse_method::String="",crop::Int=-12)
+
+#Check if the inverse signal is mono
+if inv[1].channels==1
+	inv=inv[1] #takes the first element of the list
+	#first get length of samples of inverse
+	inv_l=inv.l_samples
+
+	#small prime padding
+	optilength=nextprod([2,3,5,7,11,13,17],2*inv_l-1)
+	opti_rfft=Int(floor(optilength/2))+1
+	padnum=nextprod([2,3,5,7,11,13,17],2*inv_l-1)-inv_l
+	#zero pad the inverse to length of 2*l-1
+	inv_sampp=vcat(inv.samples,zeros(typeof(inv.samples[1]),padnum,1))
+	#precomputing transform
+	inv_fft=rfft(inv_sampp)
+else
+	error("The Inverse Sweep needs to be a single channel (monophonic) signal")
+end
+
+#Planned FFT assuming 
+n_sweep_c=swp[1].channels #the number of channels in the rcorded sweep
+opt_fft=plan_rfft(zeros(typeof(swp[1].samples[1]),optilength,n_sweep_c),flags=fft_flag,timelimit=tlimit) #generating FFT plan
+#opt_fft_inv=inv(opt_fft) #obtianing the inverse transfom doesn't work
+opt_fft_inv=plan_irfft(zeros(typeof(complex(swp[1].samples[1])),opti_rfft,n_sweep_c),optilength,flags=fft_flag,timelimit=tlimit)
+	
+	#auto generate the zero pad
+	pad=zeros(typeof(swp[1].samples[1]),padnum,n_sweep_c)
+	#create linked list to store impulses
+	implist=MutableLinkedList{Acoustic}()
+	for swpz in swp
+		
+		#Create output storage linked list and iterate over individual signal playback. aka a stereo input will have two input channels
+		for chan in 1:1:ichannel
+			
+			#Calculate Index
+			first_i=(inv_l*chan)-inv_l+1
+			last_i=chan*inv_l
+
+			#check if the last_i index surpasses the end of the array
+			if last_i>swpz.l_samples
+				#get all the samples for the frame
+				sig=swpz.samples[first_i:end,:]
+				#gets the length if the last section
+				sigl=size(sig)[1]
+				#detertimes the length needed for zero padding
+				padl=optilength-sigl
+				#Creates the pad
+				padng=zeros(padl,n_sweep_c)
+				#adds the pad to signal
+				sig=vcat(sig,padng)
+				#transform
+				sig_transform=opt_fft*sig
+				#convolve
+				sig_transform=(*).(inv_fft,sig_transform)
+				#take inverse transform
+				out=opt_fft_inv*sig_transform
+			else
+				#zero pad
+				sig=vcat(swpz.samples[first_i:last_i,:],pad)
+				#transform
+				sig_transform=opt_fft*sig
+				#convolve
+				sig_transform=(*).(inv_fft,sig_transform)
+				#take inverse transform
+				out=opt_fft_inv*sig_transform
+			end
+
+			#Acoustic Output
+			if ichannel==1
+				imp_name="Impulse_"*swpz.name
+				println("Obtianing Impulse Response for ",swpz.name)
+			else
+				imp_name="Impulse_"*string(chan)*"_"*swpz.name
+				println("Obtianing Impulse Response for ''",swpz.name,"'' Channel : ",string(chan))
+			end
+
+			if crop>0
+				out=out[crop:end,:]
+			end
+			#add to linked list
+			push!(implist,Acoustic(out,swpz.samplerate,imp_name,swpz.channels,swpz.format,2*inv_l-1))
+		end
+
+	end
+
+	#return output array
+	return implist
+end
 
 """
 # Peak_loc - gets index of maximum sample value
@@ -888,33 +980,7 @@ Find the index of the maximum samples level.
 function peak_loc end
 
 
-"""
-# Seq_Deconvolve - Generates a set of impulse responses from sine sweeps
-`seq_deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp="h",output="file")`-> N-channel Wav file impulse
 
-* **Inverse** - This file should be monophonic inverse sweep file.
-* **Measured** - This should be the N channel captured sweep seq
-* **Title** - If you want to name the file something besides the name of the measured sweep with impulse appended
-* **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
-* **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
-* **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels.
-* **lp** - 1 -full doubled sided impulse & lp>1- cuts from that sample to the end
-### Explation
-Deconvolve converts a measured sequence sweep into an impulse response using Logarithmic Sine Sweep Method.
-
-### Recomendations
-* Audio must be loaded with acoustic_load
-* The first argument must be a mono file inverse sweep
-* Ardour will make sample accurate edits
-* Audacity will not make sample accurate edits try to make measure sweep slighly longer
-* Type pwd() to find the where impulses are saved
-* Do not use unnormalized as the signal will clip
-* Using other normalization you like peak amplitude will destroy the amplitude relationship between impulses. Do not change normalization for a sequence.
-
-See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
-See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
-"""
-function seq_deconvolve end
 
 function parseval_crop end
 
