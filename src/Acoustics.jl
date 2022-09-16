@@ -128,8 +128,10 @@ this is a unsigned integer
 """
 function acoustic_load end
 function acoustic_load(path::String,format::String="")
+
+	loc=MutableLinkedList{String}() #a linked list storing valid full paths of files
+
 	if isdir(path)
-		loc=MutableLinkedList{String}()
 		for file in readdir(path)
 			#remove hidden files
 			fullp=joinpath(path,file) # See stores the full path of index to reduce recalculation
@@ -137,7 +139,7 @@ function acoustic_load(path::String,format::String="")
 				#left blank as we do not want hidden files and directories to be added to the list of files
 			else
 				fext=splitext(file)[2] #gets the file extension
-				fext=fext=lowercase(fext)
+				fext=lowercase(fext)
 				#=
 				Adds only wave files to the array location
 				=#
@@ -146,78 +148,117 @@ function acoustic_load(path::String,format::String="")
 				end
 			end
 		end
-		
-		#=
-		It either says no WAVE files are found or it creates an empty linked list to store the 
-		=#
-		if length(loc)==0
-			error("Directory contians no WAVE files")
-		else
-			sigz=MutableLinkedList{Acoustic}()
-				#do the creation of the acoustic load list
-			for file in loc
-				name=splitext(basename(file))[1] #get the file name without extension
-				temp=wavread(file,format="native")
-				samplerate=temp[2] #converts samplerate to proper format
-				
-				#Deterimine if it will gain anything from being stored as a 64bit float if not will save meory space
-				if typeof(temp[1])==Matrix{Int32}
-					samples=temp[1]
-				else
-					samples=Float32.(temp[1])
-				end
-				#=
-				Handles the inputing of acoustic load data
-				=#
-				sizez=size(samples)
-				l_samples=sizez[1]
-				chan=convert(UInt16,sizez[2])
-				fformat=format_parser(format,chan) #this needs to be fformat (files format) so it can reuse the format the user input
-				push!(sigz,Acoustic(samples,samplerate,name,chan,fformat,l_samples))
-			end
-			
-			return sigz
-		end
 	
 	else
-		#this is the case of a single file
-		file=basename(path) #gets the file name including extension
-		if ('.'==file[1])
-			error("Is hidden file")
-		else
-			fext=splitext(file)[2] #gets the file extension
-			fext=lowercase(fext) #makes the extension all lowercase
-			if (".wav"==fext)
-				sigz=MutableLinkedList{Acoustic}() #created an empty linked list
-				name=splitext(file)[1] #get the file name without extension
-				temp=wavread(path,format="native")
-				samplerate=temp[2] #converts samplerate to proper format
-				
-				#Deterimine if it will gain anything from being stored as a 64bit float if not will save meory space
-				if typeof(temp[1])==Matrix{Int32}
-					samples=temp[1]
-				else
-					samples=Float32.(temp[1])
-				end
-				
-				sizez=size(samples)
-				l_samples=sizez[1]
-				chan=convert(UInt16,sizez[2])
-				format=format_parser(format,chan)
-				push!(sigz,Acoustic(samples,samplerate,name,chan,format,l_samples))
-				return sigz
-			else
-				error("Not a supported file")
-			end
-		
-		end
-		
-		
+        file=basename(path)
+        if ('.'==file[1])
+            #left blank as we do not want hidden files and directories to be added to the list of files
+        else
+            fext=splitext(file)[2] #gets the file extension
+            fext=lowercase(fext)
+            #=
+            Adds only wave files to the array location
+            =#
+            if (".wav"==fext)
+                push!(loc,path)
+            end
+        end
 	
 	end
-	
-	
 
+    #=
+	It either says no WAVE files are found or it creates an empty linked list to store the 
+	=#
+	if length(loc)==0
+		error("Directory contians no WAVE files")
+    else
+
+        #Now we are creating an acoustic collection
+		sigz=MutableLinkedList{Acoustic}()
+        for file in loc
+				
+            temp=wavread(file,format="native")
+            samplerate=temp[2] #converts samplerate to proper format
+            
+            #Deterimine if it will gain anything from being stored as a 64bit float if not will save memory space
+            ttype=typeof(temp[1]) #store type of track array
+            
+            #checks if it is an Integer value which will not loose precision as a float32
+            if (ttype==Matrix{Int8})||(ttype==Matrix{UInt8})||(ttype==Matrix{Int16})||(ttype==Matrix{UInt16})||(ttype==Vector{Int8})||(ttype==Vector{UInt8})||(ttype==Vector{Int16})||(ttype==Vector{UInt16})
+                #reimports the samples as doubles then converts them knowing that no precision will be lost
+                samples=wavread(file,format="double")
+                samples=samples[1]
+                samples=Float32.(samples)
+            end
+
+            #Checks if this returns the desired floating point if it does it returns the temporary sample array
+            if (ttype==Matrix{Float32})||(ttype==Matrix{Float64})||(ttype==Vector{Float32})||(ttype==Vector{Float64})
+                #do nothing it in it proper format
+                 samples=temp[1]
+            end
+
+            #Checks if this is a single channel track due to the size function not returning 1
+            if ttype==Vector{Int32}
+                #check if the samples exceed the range of 24bit on any of its channel
+                if(minimum(temp[1])>=(-8388608))&&(maximum(temp[1])<=8388607)
+                    #Can be stored as 32bit float with no loss in precision
+                    samples=wavread(file,format="double")
+                    samples=samples[1]
+                    samples=Float32.(samples)
+                else
+                    #This has range greater than 24bit integer and therefore must be stored as a double
+                    samples=wavread(file,format="double")
+                    samples=samples[1]
+                end
+            end
+
+            if ttype==Matrix{Int32}
+                #check if the samples exceed the range of 24bit on any of its channels
+                schans=size(temp[1])
+                schans=schans[2]
+
+                #declaring linked list to be used for storing the absolute values of the arrays
+                sampmax=MutableLinkedList{Int32}()
+                sampmin=MutableLinkedList{Int32}()
+
+                #searching for the absolute values of each channel
+                for channel in 1:schans
+                    push!(sampmax,maximum(temp[1][:,channel]))
+                    push!(sampmin,minimum(temp[1][:,channel]))
+                end
+                #Finds the absolute min & max
+                sigmax=maximum(sampmax)
+                sigmin=minimum(sampmin) 
+
+                if(sigmin>=(-8388608))&&(sigmax<=8388607)
+                    #Can be stored as 32bit float with no loss in precision
+                    samples=wavread(file,format="double")
+                    samples=samples[1]
+                    samples=Float32.(samples)
+                else
+                    #This has range greater than 24bit integer and therefore must be stored as a double
+                    samples=wavread(file,format="double")
+                    samples=samples[1]
+                end
+            end
+            
+        
+                #=
+                Handles the inputing of acoustic load data
+                =#
+                name=splitext(basename(file))[1] #get the file name without extension
+
+                sizez=size(samples)
+                l_samples=sizez[1]
+                chan=convert(UInt16,sizez[2])
+                fformat=format_parser(format,chan) #this needs to be fformat (files format) so it can reuse the format the user input
+                push!(sigz,Acoustic(samples,samplerate,name,chan,fformat,l_samples))
+				println("Loaded File : ",name)
+        end
+        #returns the acoustic load list
+        return sigz
+    end
+	
 end
 
 
