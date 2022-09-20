@@ -2,13 +2,19 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,Statistics,Distributed,Reexport,DataFrames,DataStructures,FFTW
 
-export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve
+export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve,parseval_crop
+
+#constant export
 export WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_ALAW, WAVE_FORMAT_MULAW #exporting WAVE constants
-#export FFTW.MEASURE,FFTW.DESTROY_INPUT,FFTW.UNALIGNED,FFTW.CONSERVE_MEMORY,FFTW.EXHAUSTIVE,FFTW.PRESERVE_INPUT,FFTW.PATIENT,FFTW.ESTIMATE,FFTW.WISDOM_ONLY,FFTW.NO_SIMD #FFTW flags
 import FFTW:MEASURE,DESTROY_INPUT,UNALIGNED,CONSERVE_MEMORY,EXHAUSTIVE,PRESERVE_INPUT,PATIENT,ESTIMATE,WISDOM_ONLY,NO_SIMD
 export MEASURE,DESTROY_INPUT,UNALIGNED,CONSERVE_MEMORY,EXHAUSTIVE,PRESERVE_INPUT,PATIENT,ESTIMATE,WISDOM_ONLY,NO_SIMD
 #this contian how to generate third octaves
 include("bands.jl");
+
+#coarse search  1/n!
+const coarse_search=[2.5e-8,2.76e-7,2.75e-6,2.48e-5,0.198e-3,0.139e-2,0.833e-2,0.416e-1,0.167,0.5]
+#fine search exp(-n)
+const fine_search=[4.53e-5,0.123e-3,0.335e-3,0.911e-3,0.247e-2,0.674e-3,0.0183,0.0498,0.135]
 
 using Reexport
 @reexport using .Bands
@@ -1021,10 +1027,150 @@ Find the index of the maximum samples level.
 function peak_loc end
 
 
+#=
+This is an auxillary function that sets all the values below the noise floor to zero. 
+That way roundoff error is not used to calculate signal energy. 
+The returned signal is also squared to reduce redudant computation.
+=#
+function threshold(x::Real,cutoff::Real)
+	if abs2(x)>=abs2(cutoff)
+		return abs2(x)
+	else
+		return convert(typeof(x),0.0)
+	end
+end
+
+#gets the coefficient for decibel so that we have enough precision to compute the sum but no deal with roundoff error
+function debpre_part(x)
+	amptde=db2amp(x)
+	expnt=floor(log(10,amptde))
+	significant=floor(amptde*10^-expnt,digits=3)
+
+	return (amp2db(significant*10^expnt),significant,expnt)
+end
 
 
+#uses the Parseval's identity to find the optimal length of impulse by preserving the total within a user defined threshold
+#see analog devices MT-001
 function parseval_crop end
+function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24)
 
+	#define cropped output array
+	implist=MutableLinkedList{Acoustic}()
+
+	#threshold types dB or bit
+	if "fbit"==lowercase(cutoff_type)
+		if Int(cutoff)==32
+			pcutoff=9.749*10^-8
+		elseif Int(cutoff)==64
+			pcutoff=1.819*10^-16
+		else
+			#defaults to 24bit int precision
+			pcutoff=2.051*10^-7.0
+		end
+
+
+	elseif ("ibit"==lowercase(cutoff_type))||("bit"==lowercase(cutoff_type))
+		if Int(cutoff)==8
+			pcutoff=3.133*10^-2.0
+		elseif Int(cutoff)==16
+			pcutoff=8.016*10^-4.0
+		elseif Int(cutoff)==24
+			pcutoff=2.051*10^-7.0
+		elseif Int(cutoff)==32
+			pcutoff=5.248*10^-9.0
+		else
+			#defaults to 24bit precision
+			pcutoff=2.051*10^-7.0
+		end
+	
+	elseif "db"==lowercase(cutoff_type)
+		temp=debpre_part(-abs(cutoff))
+		pcutoff=temp[2]*10^jkl[3]
+	else
+		error("Unsupported cutoff type!")
+	end
+
+	#Loop over the impulses
+	for rawi in imp
+		max_l=rawi.l_samples
+		last_l=max_l
+		crop=rawi.l_samples
+		thresamp=rawi.samples
+		
+		#normalize so that the maximum value are equal to 1
+		absmax=maximum(thresamp)
+		absmin=abs(minimum(thresamp))
+		finmax=maximum([absmax,absmin]) #finds the absolute maximum distance from zero
+		thresamp=(/).(thresamp,finmax) #normalizes all the channels
+		thresamp=threshold.(thresamp,pcutoff) #sets values below cutoff to zero
+		thresamp=sum(thresamp,dims=2) #mix into one mono channel
+		nrg=sum(thresamp) #Calculate total energy
+		lim=round(nrg*(1-pcutoff),digits=3) #the total energy it should not fall below
+		samp_e=nrg # actual measure of energy
+		m_e=nrg # a rounded measure of energy
+
+		#loop inits
+		diff=0.0
+		ξ=1.2 #the default value for the adaption parameter
+		slow_mode=false #a flag that tells the loop that it has entered slow mode
+		increment_mode=false # flag that tells it to just steo values 1 at a time
+		while (((m_e-lim)/lim)>0.0005)&&(1<last_l)
+
+			if !(increment_mode)
+				step=exp(-ξ)*last_l #adapt the size
+				step=floor(step)
+				step=Int(step)
+			else
+				step=last_l-1
+			end
+
+			if (last_l==rawi.l_samples)&&!(increment_mode)
+				val=sum(thresamp[step:last_l])
+			elseif !increment_mode
+				val=sum(thresamp[step:(last_l-1)])
+			else
+				val=thresamp[step]
+			end
+			
+			m_eo=m_e #stores the old estimated energy value
+			samp_e=samp_e-val
+			m_e=round(samp_e,digits=3) 
+			#adjust adaption
+			adapt=val/nrg
+			diff=m_eo-m_e
+
+			if (diff==0)&&(ξ<18.4)&&!(slow_mode)
+				ξ=ξ+1
+			elseif (diff==0)&&(ξ<0.2)&&slow_mode
+				ξ=ξ+0.001
+			elseif (diff>0)&&(1<ξ)&&(step<0.3*max_l)
+				#println("Doing Slow Adaption now")
+				ξ=0.01
+				slow_mode=true
+			elseif (diff>0)&&(0.0001<ξ)
+				#slow down adaption
+				ξ=ξ-0.001
+			elseif ((m_e-lim)/lim)<=0.01
+				increment_mode=true
+				slow_mode=false
+				ξ=0.0
+				#println("Doing Incrementing Values now")
+			else
+				#do not adapt
+			end
+			crop=last_l
+			last_l=step #set old l value
+			#println("Total Energy : ",nrg," ,Target_e : ",lim," , Sample Energy : ",m_e,", Step Energy : ",100*adapt,"% , Step : ",step,", Last Length : ",crop," , ξ : ",ξ)
+		end
+		println("Cropped Impulse : ",rawi.name)
+		push!(implist,Acoustic(rawi.samples[1:crop,:],rawi.samplerate,rawi.name,rawi.channels,rawi.format,rawi.l_samples))
+	end
+
+	#return the collect of cropped
+	return implist
+
+end
 
 """
 scale -"amp" is just linear amplitude and "dB" is decibel level
