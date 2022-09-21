@@ -1052,8 +1052,9 @@ end
 
 #uses the Parseval's identity to find the optimal length of impulse by preserving the total within a user defined threshold
 #see analog devices MT-001
+#efract is the fraction of the parseval energy
 function parseval_crop end
-function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24)
+function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24,efract::Real=0.95)
 
 	#define cropped output array
 	implist=MutableLinkedList{Acoustic}()
@@ -1086,9 +1087,13 @@ function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24)
 	
 	elseif "db"==lowercase(cutoff_type)
 		temp=debpre_part(-abs(cutoff))
-		pcutoff=temp[2]*10^jkl[3]
+		pcutoff=temp[2]*10^temp[3]
 	else
 		error("Unsupported cutoff type!")
+	end
+
+	if efract>1
+		efract=efract/100
 	end
 
 	#Loop over the impulses
@@ -1106,16 +1111,15 @@ function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24)
 		thresamp=threshold.(thresamp,pcutoff) #sets values below cutoff to zero
 		thresamp=sum(thresamp,dims=2) #mix into one mono channel
 		nrg=sum(thresamp) #Calculate total energy
-		lim=round(nrg*(1-pcutoff),digits=3) #the total energy it should not fall below
+		lim=nrg*efract #the total energy it should not fall below
 		samp_e=nrg # actual measure of energy
-		m_e=nrg # a rounded measure of energy
 
 		#loop inits
 		diff=0.0
 		ξ=1.2 #the default value for the adaption parameter
 		slow_mode=false #a flag that tells the loop that it has entered slow mode
 		increment_mode=false # flag that tells it to just steo values 1 at a time
-		while (((m_e-lim)/lim)>0.0005)&&(1<last_l)
+		while (((samp_e-lim)/lim)>0.0005)&&(1<last_l)
 
 			if !(increment_mode)
 				step=exp(-ξ)*last_l #adapt the size
@@ -1133,12 +1137,12 @@ function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24)
 				val=thresamp[step]
 			end
 			
-			m_eo=m_e #stores the old estimated energy value
+			samp_eo=samp_e #stores the old estimated energy value
 			samp_e=samp_e-val
-			m_e=round(samp_e,digits=3) 
+
 			#adjust adaption
 			adapt=val/nrg
-			diff=m_eo-m_e
+			diff=samp_eo-samp_e
 
 			if (diff==0)&&(ξ<18.4)&&!(slow_mode)
 				ξ=ξ+1
@@ -1151,7 +1155,7 @@ function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24)
 			elseif (diff>0)&&(0.0001<ξ)
 				#slow down adaption
 				ξ=ξ-0.001
-			elseif ((m_e-lim)/lim)<=0.01
+			elseif ((samp_e-lim)/lim)<=0.01
 				increment_mode=true
 				slow_mode=false
 				ξ=0.0
@@ -1161,10 +1165,13 @@ function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24)
 			end
 			crop=last_l
 			last_l=step #set old l value
-			#println("Total Energy : ",nrg," ,Target_e : ",lim," , Sample Energy : ",m_e,", Step Energy : ",100*adapt,"% , Step : ",step,", Last Length : ",crop," , ξ : ",ξ)
+			#println("Total Energy : ",nrg," ,Target_e : ",lim,", Step Energy : ",100*adapt,"% , Step : ",step,", Last Length : ",crop," , ξ : ",ξ)
 		end
+		cropped_s=rawi.samples[1:crop,:]
+		new_l=length(cropped_s)
+
 		println("Cropped Impulse : ",rawi.name)
-		push!(implist,Acoustic(rawi.samples[1:crop,:],rawi.samplerate,rawi.name,rawi.channels,rawi.format,rawi.l_samples))
+		push!(implist,Acoustic(cropped_s,rawi.samplerate,rawi.name,rawi.channels,rawi.format,new_l))
 	end
 
 	#return the collect of cropped
