@@ -1054,7 +1054,7 @@ end
 #see analog devices MT-001
 #efract is the fraction of the parseval energy
 function parseval_crop end
-function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24,efract::Real=0.95)
+function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24,efract::Real=0.985)
 
 	#define cropped output array
 	implist=MutableLinkedList{Acoustic}()
