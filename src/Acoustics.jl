@@ -1,6 +1,6 @@
 module Acoustics
 
-using DSP,WAV,ReadWriteDlm2,Statistics,Distributed,Reexport,DataFrames,DataStructures,FFTW
+using DSP,WAV,ReadWriteDlm2,Statistics,Distributed,Reexport,DataFrames,DataStructures,FFTW,LinearAlgebra
 
 export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve,parseval_crop,gain
 
@@ -1226,6 +1226,54 @@ function gain(signal,value::Number,scale_type::String)
 	for sig in signal
 		gained=(*).(gain,sig.samples)
 		push!(scaled_sig,Acoustic(gained,sig.samplerate,sig.name,sig.channels,sig.format,sig.l_samples))
+	end
+	
+	return scaled_sig
+end
+#will allow per channel gain setting to be performed with a sample array
+function gain(signal,value::Vector{<:Number},scale_type::String)
+	scaled_sig=MutableLinkedList{Acoustic}()
+	if (lowercase(scale_type)=="amplitude")||(lowercase(scale_type)=="amp")
+		gain=Diagonal(value)
+	elseif (lowercase(scale_type)=="powerdb")||(lowercase(scale_type)=="power")
+		gain=Diagonal(db2pow.(value))
+	elseif (lowercase(scale_type)=="ampdb")||(lowercase(scale_type)=="amplitudedb")
+		gain=Diagonal(db2amp.(value))
+	elseif lowercase(scale_type)=="Neper"
+
+	else
+		error("Unsupported scale_type")
+
+	end
+
+	for sig in signal
+		gained=sig.samples*gain
+		push!(scaled_sig,Acoustic(gained,sig.samplerate,sig.name,sig.channels,sig.format,sig.l_samples))
+	end
+	
+	return scaled_sig
+end
+
+#will allow mixdowns to be performed with a sample array
+function gain(signal,value::Array{<:Number},scale_type::String)
+	scaled_sig=MutableLinkedList{Acoustic}()
+	if (lowercase(scale_type)=="amplitude")||(lowercase(scale_type)=="amp")
+		gain=value
+	elseif (lowercase(scale_type)=="powerdb")||(lowercase(scale_type)=="power")
+		gain=db2pow.(value)
+	elseif (lowercase(scale_type)=="ampdb")||(lowercase(scale_type)=="amplitudedb")
+		gain=db2amp.(value)
+	elseif lowercase(scale_type)=="Neper"
+
+	else
+		error("Unsupported scale_type")
+
+	end
+	gain_sz=size(gain)
+	new_chan=gain_sz[2]
+	for sig in signal
+		gained=sig.samples*gain
+		push!(scaled_sig,Acoustic(gained,sig.samplerate,sig.name,new_chan,sig.format,sig.l_samples))
 	end
 	
 	return scaled_sig
