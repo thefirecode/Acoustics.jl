@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,Statistics,Distributed,Reexport,DataFrames,DataStructures,FFTW
 
-export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve,parseval_crop
+export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve,parseval_crop,gain
 
 #constant export
 export WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_ALAW, WAVE_FORMAT_MULAW #exporting WAVE constants
@@ -1179,11 +1179,56 @@ function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24,efract::Re
 
 end
 
+function filter end
+function filter(sig,bands::Int64,h_frequency::Real=20000.0,l_frequency::Real=20.0) 
+#=
+parallel filter per channel per track
+we want track=>filter=>process =>free filtered track
+=#
+
+end
+
 """
 scale -"amp" is just linear amplitude and "dB" is decibel level
 
 """
 function gain end
+"""
+# Peak_loc - gets index of maximum sample value
+`gain(signal,value::Number,scale_type::String)`-> (samples,seconds)
 
+* **Signal** - Just an acoustic_load collection (Array or Linked List)
+* **value** - the gain in decibel or amplitude
+* **scale_type** - "powerdb","ampdb" & "amplitude"
+
+### Explation
+Applies a gain to a signal to an acoustic format
+
+### Recomendations
+* 
+* 
+"""
+function gain(signal,value::Number,scale_type::String)
+	scaled_sig=MutableLinkedList{Acoustic}()
+	if (lowercase(scale_type)=="amplitude")||(lowercase(scale_type)=="amp")
+		gain=value
+	elseif (lowercase(scale_type)=="powerdb")||(lowercase(scale_type)=="power")
+		gain=db2pow(value)
+	elseif (lowercase(scale_type)=="ampdb")||(lowercase(scale_type)=="amplitudedb")
+		gain=db2amp(value)
+	elseif lowercase(scale_type)=="Neper"
+
+	else
+		error("Unsupported scale_type")
+
+	end
+
+	for sig in signal
+		gained=(*).(gain,sig.samples)
+		push!(scaled_sig,Acoustic(gained,sig.samplerate,sig.name,sig.channels,sig.format,sig.l_samples))
+	end
+	
+	return scaled_sig
+end
 
 end # module
