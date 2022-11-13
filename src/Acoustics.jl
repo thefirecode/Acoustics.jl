@@ -2,7 +2,7 @@ module Acoustics
 
 using DSP,WAV,ReadWriteDlm2,Statistics,Distributed,Reexport,DataFrames,DataStructures,FFTW,LinearAlgebra
 
-export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve,parseval_crop,gain
+export L,acoustic_load,filter_verify,acoustic_save,sweep,sweep_target,deconvolve,parseval_crop,gain,biir
 
 #constant export
 export WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_ALAW, WAVE_FORMAT_MULAW #exporting WAVE constants
@@ -33,6 +33,7 @@ Utility – inputs audio and outputs audio
 0x02-G recording-"g"
 0x03-Binaural-"bin"
 0x04-Multichannel-"m" - assume multichannel omni
+0x05-B-Format-"bform" - ambisonic b-format
 =#
 
 struct Acoustic
@@ -271,10 +272,11 @@ end
 """
 # Acoustic Save
 
-`acoustic_save(signal,path="";bits=0,sformat=0)` - exports acoustics collection to audio files
+`acoustic_save(signal,path="";bits=0,sformat=0,type="wav")` - exports acoustics collection to audio files
 
 * **signal** - an Acoustic collection
-* **path** - the file path to save the files. it defaults to the current workinf directory
+* **path** - the file path to save the files. it defaults to the current working directory
+* **type** - "wav" or "csv"
 * **bits** - specifies the number of bits to be used to encode each sample; the default (0) is an automatic choice based on the values of sform.
 * **sformat** - controls the type of encoding used in the file. The options are `WAVE_FORMAT_PCM`, `WAVE_FORMAT_IEEE_FLOAT` ,`WAVE_FORMAT_ALAW` ,` WAVE_FORMAT_MULAW`
 
@@ -288,7 +290,7 @@ This is merely a pretty warper for wavwrite for the WAV library. You will want t
 
 """
 function acoustic_save end
-function acoustic_save(signal,path="";bits=0,sformat=0)
+function acoustic_save(signal,path="";bits=0,sformat=0,type="wav")
 
 	#if a path is not specified it uses the current working directory
 	
@@ -297,14 +299,24 @@ function acoustic_save(signal,path="";bits=0,sformat=0)
 		if path==""
 			path=pwd()
 		else
-			
+
 		end
-		
-		for file in signal
+		if type=="wav"
+			for file in signal
 			
-			fullp=joinpath(path,file.name*".wav")
-			println("Saving : "*fullp)
-			wavwrite(file.samples,fullp,Fs=file.samplerate, nbits=bits, compression=sformat)
+				fullp=joinpath(path,file.name*".wav")
+				println("Saving : "*fullp)
+				wavwrite(file.samples,fullp,Fs=file.samplerate, nbits=bits, compression=sformat)
+			end
+		elseif lowercase(type)=="csv"
+			for file in signal
+			
+				fullp=joinpath(path,file.name*"_fs_"*string(file.samplerate)*".csv")
+				println("Saving : "*fullp)
+				writecsv2(fullp,file.samples)
+			end
+		else
+			error("Unsupported type argument")
 		end
 		
 	else
@@ -1277,6 +1289,73 @@ function gain(signal,value::Array{<:Number},scale_type::String)
 	end
 	
 	return scaled_sig
+end
+#=
+bisir-backward integrated squared impulse response
+this lowpass so can be downsampled
+=#
+function bisir(x::Array{<:AbstractFloat},l_samples::Int64)
+	#=
+	sqr_sum - this is the variable that holds the temporary sum at each time index
+	energ - this is the energy signal of the input x
+	bsr - the final bsr output 
+	dexer -  the channel index
+	=#
+	x=Float64.(x)
+	sqr_sum=sum(abs2,x,dims=1)
+	enrg=abs2.(x)
+	if ndims(x)==1
+		bsr=Array{typeof(x[1])}(undef,l_samples)
+		dexer=1
+	else
+		bsr=Array{typeof(x[1])}(undef,size(x))
+		dexer=size(x)[2]
+	end
+	
+	#gives initial value
+	for i in 1:dexer
+		bsr[1,i]=sqr_sum[i]
+	end
+
+	#create the integrated impulse response
+	for i in 2:(l_samples-1)
+
+		for j in 1:dexer
+			sqr_sum[j]=sqr_sum[j]-enrg[i,j]
+			bsr[i,j]=sqr_sum[j]		
+		end
+
+	end
+
+	#This solves roundoff error problems
+	for j in 1:dexer
+		bsr[end,j]=enrg[end,j]	
+	end
+
+	return bsr
+end
+#=
+samplerate is from the first file
+=#
+
+function biir(signal,bands::Integer=1,h_frequency::Real=20000.0,l_frequency::Real=20.0)
+	biir_sig=MutableLinkedList{Acoustic}()
+	gen_bands=generateband(bands,signal[1].samplerate,h_frequency,l_frequency)
+	band_filter=gen_bands[1]
+	center=gen_bands[2]
+	fil_l=length(center)
+
+	for sig in signal
+		println("Backward Integrated Impulse Response Calculated for "*sig.name)
+		for dex in 1:fil_l
+			sig_f=filt(band_filter[dex],sig.samples)
+			sig_f=bisir(sig_f,sig.l_samples)
+			new_name=sig.name*"_integrated_imp_"*string(center[dex])*"Hz"
+			push!(biir_sig,Acoustic(sig_f,sig.samplerate,new_name,sig.channels,sig.format,sig.l_samples))
+		end
+	end
+
+	return biir_sig
 end
 
 end # module
