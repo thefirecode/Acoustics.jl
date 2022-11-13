@@ -1180,7 +1180,7 @@ function parseval_crop(imp,cutoff_type::String="ibit",cutoff::Real=24,efract::Re
 			#println("Total Energy : ",nrg," ,Target_e : ",lim,", Step Energy : ",100*adapt,"% , Step : ",step,", Last Length : ",crop," , ξ : ",ξ)
 		end
 		cropped_s=rawi.samples[1:crop,:]
-		new_l=length(cropped_s)
+		new_l=size(cropped_s)[1]
 
 		println("Cropped Impulse : ",rawi.name)
 		push!(implist,Acoustic(cropped_s,rawi.samplerate,rawi.name,rawi.channels,rawi.format,new_l))
@@ -1303,13 +1303,15 @@ function bisir(x::Array{<:AbstractFloat},l_samples::Int64)
 	=#
 	x=Float64.(x)
 	sqr_sum=sum(abs2,x,dims=1)
-	enrg=abs2.(x)[end:-1:1]
+	
 	if ndims(x)==1
 		bsr=Array{typeof(x[1])}(undef,l_samples)
 		dexer=1
+		enrg=abs2.(x)[end:-1:1]
 	else
 		bsr=Array{typeof(x[1])}(undef,size(x))
 		dexer=size(x)[2]
+		enrg=abs2.(x)[end:-1:1,:]
 	end
 	
 	#gives initial value
@@ -1349,7 +1351,8 @@ function biir(signal,bands::Integer=1,h_frequency::Real=20000.0,l_frequency::Rea
 		println("Backward Integrated Impulse Response Calculated for "*sig.name)
 		for dex in 1:fil_l
 			sig_f=filt(band_filter[dex],sig.samples)
-			sig_f=bisir(sig_f,sig.l_samples)
+			n_l=size(sig_f)[1] #Filtering can change the length of the samples
+			sig_f=bisir(sig_f,n_l)
 			new_name=sig.name*"_integrated_imp_"*string(center[dex])*"Hz"
 			push!(biir_sig,Acoustic(sig_f,sig.samplerate,new_name,sig.channels,sig.format,sig.l_samples))
 		end
