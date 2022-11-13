@@ -1303,7 +1303,7 @@ function bisir(x::Array{<:AbstractFloat},l_samples::Int64)
 	=#
 	x=Float64.(x)
 	sqr_sum=sum(abs2,x,dims=1)
-	enrg=abs2.(x)
+	enrg=abs2.(x)[end:-1:1]
 	if ndims(x)==1
 		bsr=Array{typeof(x[1])}(undef,l_samples)
 		dexer=1
