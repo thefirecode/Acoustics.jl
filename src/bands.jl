@@ -121,7 +121,7 @@ function generateband(bands::Int64,samplerate::Real,h_frequency::Real=20000.0,l_
 
 	end
 
-	return (all_fil,centerz)
+	return (all_fil,centerz,low_bw,upp_bw)
 
 end
 
