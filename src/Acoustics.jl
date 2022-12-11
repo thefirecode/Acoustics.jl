@@ -1012,8 +1012,10 @@ opt_fft_inv=plan_irfft(zeros(typeof(complex(swp[1].samples[1])),opti_rfft,n_swee
 			if crop>0
 				out=out[crop:end,:]
 			end
-			#add to linked list
-			push!(implist,Acoustic(out,swpz.samplerate,imp_name,swpz.channels,swpz.format,2*inv_l-1))
+			#add to linked list making sure it is the proper length
+			fin_l=size(out)
+            fin_l=fin_l[1]
+            push!(implist,Acoustic(out,swpz.samplerate,imp_name,swpz.channels,swpz.format,fin_l))
 		end
 
 	end
