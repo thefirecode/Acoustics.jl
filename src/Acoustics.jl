@@ -79,27 +79,21 @@ end
 
 
 #weighting function
-function frequency_weighting(x::Array{<:AbstractFloat,1},weight::String,Fs::Float32)
+function frequency_weighting(weight::String,Fs::Float32)
 
-	samples=x
 	if lowercase(weight)=="z"
-		return samples
+		w_fil=[1]
 	elseif lowercase(weight)=="a"
 		w_fil=a_wtd(Fs)
-		samples=filt(w_fil,samples)
-		return samples
 	elseif lowercase(weight)=="c"
 		w_fil=c_wtd(Fs)
-		samples=filt(w_fil,samples)
-		return samples
 	elseif lowercase(weight)=="ccir"
 		w_fil=ccir(Fs)
-		samples=filt(w_fil,samples)
-		return samples
 	else
 		error("Unknown Weighting")
 	end
 
+	return w_fil
 end
 
 """
@@ -137,6 +131,7 @@ function acoustic_load end
 function acoustic_load(path::String,format::String="")
 
 	loc=MutableLinkedList{String}() #a linked list storing valid full paths of files
+	resuls=MutableLinkedList{Acoustic}()
 
 	if isdir(path)
 		for file in readdir(path)
@@ -352,7 +347,7 @@ function Leq(p::Array{<:AbstractFloat},l::Int64,reference_level::AbstractFloat=1
 	sig=abs2.(p)
 	sig=sum(sig)
 	sig=pow2db(sig)
-	scaler=abs2(l)*reference_level
+	scaler=l*abs2(reference_level)
 	scaler=pow2db(scaler)
 	output=sig-scaler
 	output=oftype(p[1],output)
@@ -364,76 +359,140 @@ implement weighting
 and return measure format
 =#
 function L end
-function L(source::Acoustic,channels::String,tweight::String,weighting::String,bands::Integer=1,ref::AbstractFloat=1.0,h_frequency::Real=20000.0,l_frequency::Real=20.0)
-	samps=source.samples
-	chan=source.channels
-	samp_l=source.l_samples
-	samplerate=source.samplerate
+function L(signal,bands::Integer=1,weighting::String="z",h_frequency::Real=20000.0,l_frequency::Real=20.0,tweight::String="leq";reference_level::Float64=1.0)
+	#=
+	weighting - Stores a string that refers to a weighting filter
+	result - This is a linked list storing the measure that will be returned to the user
+	sig - A single Acoustics data type signal
+	bandz - An array that stores all the results for the bandpass filter
+	nbandz - the resultant number of bands
+	tresults - The results for a single Acoustics data type ()
+	dex - generic indexing variable
+	theader - the temporary header for each signal
+	bfil - temporary variable for bandpass filter
+	bandnum - a temporary variable to store which band number is currently being processed
+	filterd_sig - fractional octave band filtered signal
+	level - the measured level
+	tframe - Temporary data frame
+	weightfil - the variable to store weighting generated
+	obandfs - the old bandpass filter samples frequency. So if the samplerate does not change it will not cause a recalculation
+	=#
 
-	if (h_frequency==20000.0)&&(l_frequency==20.0)
-		raw_gen=generateband(bands,samplerate)
-	elseif !(h_frequency==20000.0)
-		raw_gen=generateband(bands,samplerate,h_frequency)
-	else
-		raw_gen=generateband(bands,samplerate,h_frequency,l_frequency)
-	end
+	#DataFrame([1 1 1; 1 1 1; 1 1 1],["Frequency","channel_1","channel_2"])
+	result=MutableLinkedList{Measure}()
+	weighting=lowercase(weighting) #stores the processed weighting value
 
-	band_filters=raw_gen[1]
-	center_freq=raw_gen[2]
-	bands_num=length(center_freq)
-	output=Array{Float64, 2}(undef,bands_num,chan)
+	obandfs=Float32(-12) #Initializing the band samplerate
+	#=
+	1. Split into channels
+	2. apply overall wieghting filter
+	3. Apply third octave filter
+	4. Measure parameter
+	5. repeat
 
-	if lowercase(weighting)=="z"
-		if (lowercase(channels)=="all")
-			if (lowercase(tweight)=="eq")||(lowercase(tweight)=="continuous")
-				for i in 1:chan
-					samp_chan=samps[:,i]
-					band_index=1
-					for fil in band_filters
-						samp_filter=filt(fil,samp_chan)
-						output[band_index,i]=Leq(samp_filter,samp_l,ref)
-						band_index+=1
-					end
-				end
-			else
+	=#
+
+	#makes sure it does not waste cycles looking up a z (unwieghted) coefficients
+	if weighting=="z"
+		#Splits the the signals in array into individual signals
+		for sig in signal
+			#=
+			Splits the signal into individual channels this works for a single channel signals. 
+			Build all the redundant code so it does not have to slow memory allocations or repeated computatopms
+			=# 
+			println("Processing Signal : ",sig.name)
+			if obandfs!=sig.samplerate
+				bandz=generateband(bands,sig.samplerate,h_frequency,l_frequency) # the bandpass filter
+				#(rows,cols)
+				nbandz=length(bandz[2]) #stores the number of bands
 			end
-		else
-			error("Unknown argument for channels")
-		end
+			#=
+			(rows,cols) = (# of bands, (number of channels & frequency array))
+			=#
+			tresults=Array{typeof(sig.samples[1,1])}(undef,(nbandz,(sig.channels+1)))
+			theader=Array{String,1}(undef,(sig.channels+1))
 
-		return output
-	else
-		if (lowercase(channels)=="all")
-			if (lowercase(tweight)=="eq")||(lowercase(tweight)=="continuous")
-				for i in 1:chan
-					samp_chan=samps[:,i]
-					samp_chan=frequency_weighting(samp_chan,weighting,samplerate)
-					band_index=1
-					for fil in band_filters
-						samp_filter=filt(fil,samp_chan)
-						output[band_index,i]=Leq(samp_filter,samp_l,ref)
-						band_index+=1
-					end
-				end
-			else
+			theader[1]="Frequency" #the first value of the header array will store frequency it is always in hertz
+
+			#Now we index over each channel for the header
+			for dex in 1:sig.channels
+				theader[dex+1]="Channel_"*string(dex) #has to be shifted by 1 as frequency is stores in the first index
 			end
-		else
-			error("Unknown argument for channels")
+			
+			#Loading the frequency bands into the 
+			for dex in 1:nbandz
+				tresults[dex,1]=bandz[2][dex]
+			end
+
+			for dex in 1:sig.channels
+				sigc=sig.samples[:,dex] #stores the samples from that channel
+
+				#index over the bandpass filter
+				bandnum=1 #the number 
+				for bfil in bandz[1]
+					filterd_sig=filt(bfil,sigc)
+					level=Leq(filterd_sig,length(filterd_sig),reference_level) #Measuring the Leq
+					tresults[bandnum,(dex+1)]=level #storing the the temporary result array
+					bandnum+=1 # indexing band number to go the next band in the result array
+				end
+
+
+			end
+			tframe=DataFrame(tresults,theader)
+			push!(result,Measure(sig.name,"Leq",sig.format,Dict([("Reference Level", reference_level), ("Time Weight", "Continuous")]),weighting,UInt8(bands),h_frequency,l_frequency,sig.samplerate,UInt16(sig.channels),tframe))
 		end
+	else
+		#Splits the the signals in array into individual signals
+		for sig in signal
+			#=
+			Splits the signal into individual channels this works for a single channel signals. 
+			Build all the redundant code so it does not have to slow memory allocations or repeated computatopms
+			=# 
+			weightfil=frequency_weighting(weighting,sig.samplerate) #Overall weighting Filter
+			bandz=generateband(bands,sig.samplerate,h_frequency,l_frequency) # the bandpass filter
+			#(rows,cols)
+			nbandz=length(bandz[2]) #stores the number of bands
 
-		return output
+			#=
+			(rows,cols) = (# of bands, (number of channels & frequency array))
+			=#
+			tresults=Array{typeof(sig.samples[1,1])}(undef,(nbandz,(sig.channels+1)))
+			theader=Array{String,1}(undef,(sig.channels+1))
+
+			theader[1]="Frequency" #the first value of the header array will store frequency it is always in hertz
+
+			#Now we index over each channel for the header
+			for dex in 1:sig.channels
+				theader[dex+1]="Channel_"*string(dex) #has to be shifted by 1 as frequency is stores in the first index
+			end
+			
+			#Loading the frequency bands into the 
+			for dex in 1:nbandz
+				tresults[dex,1]=bandz[2][dex]
+			end
+
+			for dex in 1:sig.channels
+				sigc=sig.samples[:,dex] #stores the samples from that channel
+				sigc=filt(weightfil,sigc)
+
+				#index over the bandpass filter
+				bandnum=1 #the number 
+				for bfil in bandz[1]
+					filterd_sig=filt(bfil,sigc)
+					level=Leq(filterd_sig,length(filterd_sig),reference_level) #Measuring the Leq
+					tresults[bandnum,(dex+1)]=level #storing the the temporary result array
+					bandnum+=1 # indexing band number to go the next band in the result array
+				end
+
+
+			end
+			tframe=DataFrame(tresults,theader)
+			push!(result,Measure(sig.name,"Leq",sig.format,Dict([("Reference Level", reference_level), ("Time Weight", "Continuous")]),weighting,UInt8(bands),h_frequency,l_frequency,sig.samplerate,UInt16(sig.channels),tframe))
+		end
 	end
-
+	return result
 end
-function L(source::Acoustic,channels::Vector{Int64},tweight::String,weighting::String,bands::Integer=1,ref::AbstractFloat=1) end
-function L(source::Acoustic,channels::String,tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
-function L(source::Acoustic,channels::Vector{Int64},tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
 
-#allows acoustics vector
-function L(source::Vector{Acoustic},channels::String,tweight::String,weighting::String,bands::Integer=0,ref::AbstractFloat=1) end
-function L(source::Vector{Acoustic},channels::Vector{Int64},tweight::String,weighting::String,bands::Integer=0,ref::AbstractFloat=1) end
-function L(source::Vector{Acoustic},channels::String,tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
-function L(source::Vector{Acoustic},channels::Vector{Int64},tweight::String,weighting::String,bands::String,ref::AbstractFloat=1) end
 
 
 """
