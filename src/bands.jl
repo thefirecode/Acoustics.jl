@@ -30,25 +30,33 @@ function upper(x::Int64,b::Int64)
 end
 
 function edge(b::Int64,h_frequency::Real=20000.0,l_frequency::Real=20.0)
-i=1
-d=-1
-x=0
-if h_frequency>=1000
-	c=center(0,b)
+#=
+This function returns an array with integer index for thr fractional octave bands
+i - stores the upper index for highest frequency
+c - stores the calculated frequency at the index
+temp - holds the array
+=#
+
+i=0 #Upper Index initializing 
+
+	if h_frequency>=1000
+		c=upper(0,b)
 		while c<=h_frequency
 			i+=1
 			c=upper(i,b)
 		end
 
-		x=center(0,b)
-
+		d=i #Lower Index is initialized 
+		
 		while l_frequency<=c
 			d-=1
-			c=lower(d,b)
+			c=center(d,b)
 		end
 
+		#=
 		i=i
 		d=d
+		=#
 
 		temp=(*).(sign.(LinRange(d,i,(i-d)+1)),abs.(LinRange(d,i,(i-d)+1)))
 		temp=round.(temp)
@@ -56,7 +64,32 @@ if h_frequency>=1000
 
 		return temp
 	else
-		error("Highest Frequency must be than greater or equal to 1kHz")
+		#This is because at almost any octave band the 0 index will equal approximately 1kHz and will not index unless the limits are reversed
+
+		c=upper(-1,b) # makes sure that the lower limit is less than 1kHz
+		d=-1  #Lower Index is initialized 
+		while l_frequency<=c
+			d-=1
+			c=center(d,b)
+		end
+
+		i=d # Upper index is initialized
+		while c<=h_frequency
+			i+=1
+			c=upper(i,b)
+		end
+		
+		#=
+		i=i
+		d=d
+		=#
+
+		temp=(*).(sign.(LinRange(d,i,(i-d)+1)),abs.(LinRange(d,i,(i-d)+1)))
+		temp=round.(temp)
+		temp=Int64.(temp)
+
+		return temp
+		
 	end
 
 end
