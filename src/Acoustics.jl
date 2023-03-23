@@ -61,19 +61,19 @@ end
 
 
 function format_parser(x::String,chan::UInt16=0x0001)
-(x=="m")&&return 0x04
-chan>0x0002&&return 0x04
-(chan==0x0001)&&return 0x00
-(chan==0x0002)&(x=="omni8")&&return 0x01
-(chan==0x0002)&(x=="g")&&return 0x02
-(chan==0x0002)&(x=="bin")&&return 0x03
-#errors this is just a section for error handling
-(chan>0x0001)&(x=="omni")&&return error("Undefined format. Try another format")
-((chan==0x0002)&!(x=="bin")&!(x=="g")&!(x=="omni8"))&&return error("Undefined format. Try another format")
-!(chan==0x0002)&(x=="omni8")&&return error("Incorrect channel count")
-!(chan==0x0002)&(x=="g")&&return error("Incorrect channel count")
-!(chan==0x0002)&(x=="bin")&&return error("Incorrect channel count")
-!(chan==0x0001)&(x=="")&&error("Unspecified Format")
+	(x=="m")&&return 0x04
+	(chan==0x0001)&&return 0x00
+	(chan==0x0002)&(x=="omni8")&&return 0x01
+	(chan==0x0002)&(x=="g")&&return 0x02
+	(chan==0x0002)&(x=="bin")&&return 0x03
+	chan>0x0001&&return 0x04
+	#errors this is just a section for error handling
+	(chan>0x0001)&(x=="omni")&&return error("Undefined format. Try another format")
+	((chan==0x0002)&!(x=="bin")&!(x=="g")&!(x=="omni8"))&&return error("Undefined format. Try another format")
+	!(chan==0x0002)&(x=="omni8")&&return error("Incorrect channel count")
+	!(chan==0x0002)&(x=="g")&&return error("Incorrect channel count")
+	!(chan==0x0002)&(x=="bin")&&return error("Incorrect channel count")
+	!(chan==0x0001)&(x=="")&&error("Unspecified Format")
 end
 
 
@@ -130,13 +130,35 @@ this is a unsigned integer
 function acoustic_load end
 function acoustic_load(path::String,format::String="")
 
-	loc=MutableLinkedList{String}() #a linked list storing valid full paths of files
-	resuls=MutableLinkedList{Acoustic}()
+	#=
+	loc - a linked list that stores valid full paths of files
+	fullp - full path of a single file
+	fext - File extension
+	file - for a single file it is just the basename of a file
+	sigz - the linked list that stores the loaded files
+	temp - stores the wavefile temporary to make sure that in can be stored in float32 without loosing precision
+	samplerate - temporary variable for storing a files samplerate
+	ttype - the temporary datatype of the sample array 
+	schans - the size of channel array
+	sampmax - temporary declared linked list to be used for storing the relatie maximum values of the array column
+	sampmin - temporary declared linked list to be used for storing the absolute values minimum of the array column
+	sigmax - the temporary absolute maximum of an array
+	sigmin - the temporary absolute minimum of an array
+	name - name of file without extension
+
+	                sizez=size(samples)
+                l_samples=sizez[1]
+                chan=convert(UInt16,sizez[2])
+                fformat=format_parser(format,chan) #this needs to be fformat (files format) so it can reuse the format the user input
+
+	=#
+
+	loc=MutableLinkedList{String}() 
 
 	if isdir(path)
 		for file in readdir(path)
 			#remove hidden files
-			fullp=joinpath(path,file) # See stores the full path of index to reduce recalculation
+			fullp=joinpath(path,file) #stores the full path of index to reduce recalculation
 			if ('.'==file[1])||(isdir(fullp))
 				#left blank as we do not want hidden files and directories to be added to the list of files
 			else
@@ -152,6 +174,7 @@ function acoustic_load(path::String,format::String="")
 		end
 	
 	else
+		#if it is just a single file
         file=basename(path)
         if ('.'==file[1])
             #left blank as we do not want hidden files and directories to be added to the list of files
@@ -169,7 +192,7 @@ function acoustic_load(path::String,format::String="")
 	end
 
     #=
-	It either says no WAVE files are found or it creates an empty linked list to store the 
+	It either says no WAVE files are found or it creates an empty linked list to store the files
 	=#
 	if length(loc)==0
 		error("Directory contians no WAVE files")
@@ -182,10 +205,13 @@ function acoustic_load(path::String,format::String="")
             temp=wavread(file,format="native")
             samplerate=temp[2] #converts samplerate to proper format
             
-            #Deterimine if it will gain anything from being stored as a 64bit float if not will save memory space
-            ttype=typeof(temp[1]) #store type of track array
+			#=
+            #Deterimine if file will loose precision from being stored as a 32bit float. 
+			if precision will not be lost memory space is saved.
+            =#
+			ttype=typeof(temp[1]) 
             
-            #checks if it is an Integer value which will not loose precision as a float32
+			#Convert integer types of the proper size to floating point
             if (ttype==Matrix{Int8})||(ttype==Matrix{UInt8})||(ttype==Matrix{Int16})||(ttype==Matrix{UInt16})||(ttype==Vector{Int8})||(ttype==Vector{UInt8})||(ttype==Vector{Int16})||(ttype==Vector{UInt16})
                 #reimports the samples as doubles then converts them knowing that no precision will be lost
                 samples=wavread(file,format="double")
@@ -720,13 +746,24 @@ See ISO-3382 for more information
 function L_j end
 
 
+#An auxiliary function for generating a logarithmic sine sweep 
 function swup(time,K,L)
-
+	#=
+		K - a parameter that is passed to control the modulation
+		L - a parameter that is passed to control the modulation
+		time - time in seconds for the sweep function
+	=#
 	return sinpi(K*(exp(time/L)-1))
 end
 
 #inverse generation
+#An auxiliary function for generating the amplitude modulation for the inverse logarithmic sine sweep 
 function iswup(time,L)
+	#=
+		L - a parameter that is passed to control the modulation
+		time - time in seconds for the sweep function
+		m - the amplitude scalar at input time
+	=#
 	m=exp(-(time)/L)
 	return m
 end
@@ -755,19 +792,43 @@ See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep
 """
 function sweep end
 function sweep(duration,f_1,f_2,samplerate)
+	#=
+		K - a sweep parameter derived from the input values
+		L - a sweep parameter derived from the input values
+		sigz - The linked list that holds the output acoustic array
+		values - stores an array of strings created from the input argument
+		n_samp - the number of samples required for the generated sweep
+		sequence - an array of time steps that will be used to calculate the sweep and inverse
+		sweep - stores an array of the sweep functions values
+		isweep - stores an array of the inverse sweep functions values
+		sname - the name generated from the input parameter of the sweep
+		isname - the name generated from the input parameter of the inverse sweep
+		swpa - the acoustic datatype that stores the sweep samples
+		iswpa - the acoustic datatype that stores the inverse sweep samples
+	=#
+
+	#Calculates the sweep parameters K & L
 	K=(duration*2*f_1)/log((f_2)/(f_1))
 	L=duration/log((f_2)/(f_1))
+
+	#Creates an empty linked list & converts value for later output
 	sigz=MutableLinkedList{Acoustic}()
 	values=string.([duration,f_1,f_2,samplerate])
-	n_samp=Int(floor(samplerate*duration))
-	sequence=range(0.0,duration,length=n_samp)
+
+	#Calculates time steps
+	n_samp=Int(floor(samplerate*duration)) #calculates the number of samples in the sweep
+	sequence=range(0.0,duration,length=n_samp) #generates an array of time step in seconds
+
+	#Generates sweep and inverse sweep
 	sweep=swup.(sequence,K,L)
 	isweep=(*).(sweep[end:-1:1],iswup.(sequence,L))
 	sname="Sweep-Duration_"*values[1]*"_f1_"*values[2]*"_f2_"*values[3]*"_Fs_"*values[4]
 	isname="Inverse-Sweep-Duration_"*values[1]*"_f1_"*values[2]*"_f2_"*values[3]*"_Fs_"*values[4]
-	swpl=Acoustic(sweep,Float32(samplerate),sname,UInt16(1),0x00,n_samp)
-	iswpl=Acoustic(isweep,Float32(samplerate),isname,UInt16(1),0x00,n_samp)
-	push!(sigz,swpl,iswpl)
+
+	#Puts the sweep and inverse into acoustic struct and put them in a linked list
+	swpa=Acoustic(sweep,Float32(samplerate),sname,UInt16(1),0x00,n_samp)
+	iswpa=Acoustic(isweep,Float32(samplerate),isname,UInt16(1),0x00,n_samp)
+	push!(sigz,swpa,iswpa)
 	return sigz
 
 end
@@ -803,8 +864,47 @@ See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep
 """
 function sweep_target end
 function sweep_target(duration,t60e,predelay,ichan,f_L,f_H,pbits::Int,samplerate,α=0.0003;inv_norm="p")
-	values=string.([duration,t60e,predelay,ichan,f_L,f_H,pbits,α])
-	#calculate the optimal values for the sweep
+	#=
+		values - 
+		edgedom - 
+		N_lh - 
+		N_L - 
+		N_H - 
+		N_2 - 
+		N_1 - 
+		f_1 - 
+		f_2 -
+		f2div1 - 
+		K - a sweep parameter derived from the input values
+		L - a sweep parameter derived from the input values
+		optil - 
+		silence - 
+		sequence - an array of time steps that will be used to calculate the sweep and inverse
+		sweep - stores an array of the sweep functions values
+		isweep - stores an array of the inverse sweep functions values
+		window - 
+		sweep_length - 
+		padding_length - 
+		padding - 
+		sweep_fft - 
+		isweep_fft - 
+		conv - 
+		length_conv -
+		bin - 
+		norm_bin - 
+		freq_bin -
+		low_index -
+		hi_index - 
+		mag_conv - 
+		avg_amp - 
+		energy - 
+		pad - 
+		sigz - The linked list that holds the output acoustic array
+		values - stores an array of strings created from the input argument
+		sname - the name generated from the input parameter of the sweep
+		isname - the name generated from the input parameter of the inverse sweep
+	=#
+	#calculates the optimal values for the sweep. while reducing repeated calculation of logs.
 	edgedom=2*α-2
 	N_lh=log(f_L*f_H)*α
 	N_L=log(f_L)*2
@@ -939,7 +1039,6 @@ function sweep_target(duration,t60e,predelay,ichan,f_L,f_H,pbits::Int,samplerate
 	
 	#prep the arrays for output
 	sigz=MutableLinkedList{Acoustic}()
-	values=string.([duration,t60e,predelay,ichan,f_L,f_H,pbits,α])
 	values=string.([duration,f_L,f_H,t60e,pbits,α])
 	sname="Sweep-time_"*values[1]*"_fl_"*values[2]*"_fH_"*values[3]*"_RTe_"*values[4]*"_bit_"*values[5]*"_α_"*values[6]
 	isname="Inverse-Sweep-time_"*values[1]*"_fl_"*values[2]*"_fH_"*values[3]*"_RTe_"*values[4]*"_bit_"*values[5]*"_α_"*values[6]
@@ -966,15 +1065,16 @@ end
 
 """
 # Deconvolve - Generates impulse responses from sine sweeps
-`deconvolve(inverse,measured;title::String="",norm::String="u",norm_o=1,lp="h",output="file")`-> N-channel Wav file impulse
+`deconvolve(inv,swp,ichannel::Int;fft_flag::UInt32=ESTIMATE,tlimit=Inf,inverse::Bool=false,inverse_method::String="",crop::Int=-12)`-> Acoustics linked listed
 
-* **Inverse** - This file should be monophonic inverse sweep file.
-* **Measured** - This should be the N channel captured sweep
-* **Title** - (optional) If you want to name the file something besides the name of the measured sweep with impulse appended
-* **Output** - (optional)The "file" argument saves the impulse to a wave file. The "acoustic_load" argument allows you to store the results to a variable. file is the default.
-* **norm** - (optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
-* **norm_o** - (optional) This allow is the custom gain input. This is the level the signal is divided by norm_o so (final impulse)/norm_o. norm_o is in amplitude not decbels.
-* **lp** - 1 -full doubled sided impulse & lp>1- cuts from that sample to the end
+* **Inv** - This file should be monophonic inverse sweep file.
+* **swp** - This should be the N channel captured sweep
+* **ichannel** -  The number of input channels on playback speakers or hardware devices. This will be the same as the argument for sweep_target.This is independent of the number of recorded channels
+* **fft_flag** - (keyword optional) FFTW planning flag 
+* **tlimit** - (keyword optional) Controls the final gain applied to the impulse with strings.l = number of samples, n = peak amplitude, u = unnormalized, o = user defined normalized with with norm_0 setting the inverse amplitude
+* **inverse** - (keyword optional) TBD but hope to find the inverse of the generated impulse response
+* **inverse_method** - (optional) TBD  Method of inverse hope to create 
+* **crop** - (keyword optional) removes all samples before this point
 ### Explation
 Deconvolve converts a measured sweep into an impulse response using Logarithmic Sine Sweep Method.
 
@@ -983,12 +1083,10 @@ Deconvolve converts a measured sweep into an impulse response using Logarithmic 
 * The first argument must be a mono file inverse sweep
 * Ardour will make sample accurate edits
 * Audacity will not make sample accurate edits try to make measure sweep slighly longer
-* Type pwd() to find the where impulses are saved
-* Do not use unnormalized as the signal will clip
-* Using other normalization you like peak amplitude will destroy the amplitude relationship between impulses.
 
 See "Simultaneous measurement of impulse response and distortion with a swept-sine technique" by Angelo Farina for more information
 See "SURROUND SOUND IMPULSE RESPONSE Measurement with the Exponential Sine Sweep; Application in Convolution Reverb" by Madeline Carson,Hudson Giesbrecht & Tim Perry for more information (ω_1 needs to be switched with ω_2)
+See "Planner Flags" in the FFTW manual or julia's FFTW.jl for more information on flags
 """
 function  deconvolve end
 function  deconvolve(inv,swp,ichannel::Int;fft_flag::UInt32=ESTIMATE,tlimit=Inf,inverse::Bool=false,inverse_method::String="",crop::Int=-12)

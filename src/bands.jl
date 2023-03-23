@@ -37,9 +37,8 @@ c - stores the calculated frequency at the index
 temp - holds the array
 =#
 
-i=0 #Upper Index initializing 
-
 	if h_frequency>=1000
+		i=0 #Upper Index initializing 
 		c=upper(0,b)
 		while c<=h_frequency
 			i+=1
@@ -52,11 +51,6 @@ i=0 #Upper Index initializing
 			d-=1
 			c=center(d,b)
 		end
-
-		#=
-		i=i
-		d=d
-		=#
 
 		temp=(*).(sign.(LinRange(d,i,(i-d)+1)),abs.(LinRange(d,i,(i-d)+1)))
 		temp=round.(temp)
@@ -78,11 +72,6 @@ i=0 #Upper Index initializing
 			i+=1
 			c=upper(i,b)
 		end
-		
-		#=
-		i=i
-		d=d
-		=#
 
 		temp=(*).(sign.(LinRange(d,i,(i-d)+1)),abs.(LinRange(d,i,(i-d)+1)))
 		temp=round.(temp)
